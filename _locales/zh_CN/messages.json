@@ -1,0 +1,77 @@
+{
+  "extensionName": {
+    "message": "TabNap"
+  },
+  "extensionDescription": {
+    "message": "自动休眠长时间不用的标签页并将其归档到最左侧。"
+  },
+  "popupTitle": {
+    "message": "😴 TabNap"
+  },
+  "currentConfig": {
+    "message": "当前配置:"
+  },
+  "nappedTabs": {
+    "message": "已休眠标签:"
+  },
+  "napNow": {
+    "message": "立即休眠非活跃标签"
+  },
+  "openOptions": {
+    "message": "打开设置"
+  },
+  "optionsTitle": {
+    "message": "😴 TabNap 设置"
+  },
+  "timeoutLabel": {
+    "message": "休眠等待时间 (分钟):"
+  },
+  "excludeAudioLabel": {
+    "message": "不休眠正在播放声音的标签页"
+  },
+  "whitelistLabel": {
+    "message": "白名单 (每行一个关键词或域名):"
+  },
+  "whitelistPlaceholder": {
+    "message": "例如: youtube.com\ngmail.com\nmusic"
+  },
+  "saveButton": {
+    "message": "保存设置"
+  },
+  "statusSaved": {
+    "message": "设置已保存。"
+  },
+  "minutes": {
+    "message": "分钟"
+  },
+  "never": {
+    "message": "永不"
+  },
+  "napGroupTitle": {
+    "message": "😴 Nap"
+  },
+  "warningText": {
+    "message": "即将休眠..."
+  },
+  "nappedFor": {
+    "message": "已休眠"
+  },
+  "nappingIn": {
+    "message": "即将休眠"
+  },
+  "addToWhitelist": {
+    "message": "加入白名单"
+  },
+  "removeFromWhitelist": {
+    "message": "移出白名单"
+  },
+  "seconds": {
+    "message": "秒"
+  },
+  "tabListTitle": {
+    "message": "标签页状态"
+  },
+  "pinnedStatus": {
+    "message": "已固定"
+  }
+}

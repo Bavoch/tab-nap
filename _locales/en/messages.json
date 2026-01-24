@@ -1,0 +1,77 @@
+{
+  "extensionName": {
+    "message": "TabNap"
+  },
+  "extensionDescription": {
+    "message": "Automatically sleep inactive tabs and archive them to the far left."
+  },
+  "popupTitle": {
+    "message": "😴 TabNap"
+  },
+  "currentConfig": {
+    "message": "Current Config:"
+  },
+  "nappedTabs": {
+    "message": "Napped Tabs:"
+  },
+  "napNow": {
+    "message": "Nap Inactive Tabs Now"
+  },
+  "openOptions": {
+    "message": "Open Options"
+  },
+  "optionsTitle": {
+    "message": "😴 TabNap Settings"
+  },
+  "timeoutLabel": {
+    "message": "Sleep Timeout (minutes):"
+  },
+  "excludeAudioLabel": {
+    "message": "Don't sleep tabs playing audio"
+  },
+  "whitelistLabel": {
+    "message": "Whitelist (one keyword/domain per line):"
+  },
+  "whitelistPlaceholder": {
+    "message": "e.g.: youtube.com\ngmail.com\nmusic"
+  },
+  "saveButton": {
+    "message": "Save Settings"
+  },
+  "statusSaved": {
+    "message": "Settings saved."
+  },
+  "minutes": {
+    "message": "mins"
+  },
+  "never": {
+    "message": "Never"
+  },
+  "napGroupTitle": {
+    "message": "😴 Nap"
+  },
+  "warningText": {
+    "message": "Napping soon..."
+  },
+  "nappedFor": {
+    "message": "Napped"
+  },
+  "nappingIn": {
+    "message": "Nap in"
+  },
+  "addToWhitelist": {
+    "message": "Add to Whitelist"
+  },
+  "removeFromWhitelist": {
+    "message": "Remove from Whitelist"
+  },
+  "seconds": {
+    "message": "s"
+  },
+  "tabListTitle": {
+    "message": "Tab Status"
+  },
+  "pinnedStatus": {
+    "message": "Pinned"
+  }
+}
