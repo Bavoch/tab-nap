@@ -87,20 +87,30 @@ async function initialize() {
     await chrome.storage.local.set(defaults);
   }
 
-  // 清理过期的休眠数据
-  const data = await chrome.storage.local.get({ nappedTabsData: {} });
+  // 清理过期的休眠数据和唤醒数据
+  const data = await chrome.storage.local.get({ nappedTabsData: {}, awakenedTabsData: {} });
   const allTabs = await chrome.tabs.query({});
   const activeTabIds = new Set(allTabs.map(t => t.id));
   const nappedTabsData = data.nappedTabsData;
+  const awakenedTabsData = data.awakenedTabsData;
   let changed = false;
+
   for (const tabId in nappedTabsData) {
     if (!activeTabIds.has(parseInt(tabId))) {
       delete nappedTabsData[tabId];
       changed = true;
     }
   }
+
+  for (const tabId in awakenedTabsData) {
+    if (!activeTabIds.has(parseInt(tabId))) {
+      delete awakenedTabsData[tabId];
+      changed = true;
+    }
+  }
+
   if (changed) {
-    await chrome.storage.local.set({ nappedTabsData });
+    await chrome.storage.local.set({ nappedTabsData, awakenedTabsData });
   }
 
   // 设置定时检查闹钟
@@ -170,6 +180,21 @@ chrome.runtime.onStartup.addListener(initialize);
 // 立即运行初始化（对于扩展重载等情况）
 initialize();
 
+// 监听扩展图标点击事件
+chrome.action.onClicked.addListener((tab) => {
+  // 向当前标签页发送消息，切换侧边栏显示
+  chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' }).catch(() => {
+    // 如果页面没加载 content script（如 chrome:// 页面），可以回退到其他方案
+    // 这里简单忽略，或者可以考虑注入 content script
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['content.js']
+    }).then(() => {
+      chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
+    }).catch(err => console.error('Failed to inject content script:', err));
+  });
+});
+
 /**
  * 如果标签页在休眠分组中，将其移出
  * @param {number} tabId 标签页 ID
@@ -185,21 +210,38 @@ async function ungroupIfNapped(tabId) {
     // 恢复标题（如果之前被修改过）
     await restoreTabTitle(tabId);
 
-    // 清理休眠时间记录
-    const data = await chrome.storage.local.get({ nappedTabsData: {} });
+    // 清理休眠时间记录，并记录唤醒时间以重置倒计时
+    const data = await chrome.storage.local.get({ nappedTabsData: {}, awakenedTabsData: {} });
+    let storageChanged = false;
+    
     if (data.nappedTabsData[tabId]) {
       delete data.nappedTabsData[tabId];
-      await chrome.storage.local.set({ nappedTabsData: data.nappedTabsData });
+      storageChanged = true;
+    }
+    
+    // 记录唤醒时间，用于重置休眠倒计时
+    data.awakenedTabsData[tabId] = { awakenedAt: Date.now() };
+    storageChanged = true;
+
+    if (storageChanged) {
+      await chrome.storage.local.set({ 
+        nappedTabsData: data.nappedTabsData,
+        awakenedTabsData: data.awakenedTabsData 
+      });
     }
 
     const tab = await chrome.tabs.get(tabId);
+    
+    // 如果标签页处于丢弃状态，则重新加载以唤醒它
+    if (tab.discarded) {
+      await chrome.tabs.reload(tab.id);
+    }
+
     if (tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
       const group = await chrome.tabGroups.get(tab.groupId);
       if (group.title && (group.title.startsWith(BASE_NAP_TITLE) || group.title === "Nap")) {
         await chrome.tabs.ungroup(tab.id);
-        // 强制重新加载标签页以获取最新状态
-        await chrome.tabs.reload(tab.id);
-        // 更新分组标题
+        // 如果上面没有通过 reload 唤醒（可能不是 discarded 只是被分组了），确保更新分组标题
         await updateGroupTitle(group.id);
         // 立即收起分组
         try {
@@ -266,11 +308,22 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     tabNapTimeouts.delete(tabId);
   }
   
-  // 清理休眠时间记录
-  const data = await chrome.storage.local.get({ nappedTabsData: {} });
+  // 清理休眠时间记录和唤醒时间记录
+  const data = await chrome.storage.local.get({ nappedTabsData: {}, awakenedTabsData: {} });
+  let storageChanged = false;
   if (data.nappedTabsData[tabId]) {
     delete data.nappedTabsData[tabId];
-    await chrome.storage.local.set({ nappedTabsData: data.nappedTabsData });
+    storageChanged = true;
+  }
+  if (data.awakenedTabsData[tabId]) {
+    delete data.awakenedTabsData[tabId];
+    storageChanged = true;
+  }
+  if (storageChanged) {
+    await chrome.storage.local.set({ 
+      nappedTabsData: data.nappedTabsData,
+      awakenedTabsData: data.awakenedTabsData 
+    });
   }
   
   updateAllNapGroups();
@@ -309,14 +362,70 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((request) => {
   if (request.action === 'napNow') {
     checkAndNapTabs(true); // 强制立即检查，忽略时间限制（或者根据逻辑决定）
+  } else if (request.action === 'napSingleTab') {
+    chrome.tabs.get(request.tabId, (tab) => {
+      if (tab) napTab(tab);
+    });
+  } else if (request.action === 'wakeUpSingleTab') {
+    ungroupIfNapped(request.tabId);
+  } else if (request.action === 'wakeUpAll') {
+    wakeUpAllTabs();
+  } else if (request.action === 'wakeUpByWhitelist') {
+    wakeUpByWhitelist();
   }
 });
 
+/**
+ * 检查所有丢弃的标签页，如果符合白名单则唤醒
+ */
+async function wakeUpByWhitelist() {
+  try {
+    const settings = await chrome.storage.local.get({ whitelist: '' });
+    const whitelist = settings.whitelist.split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (whitelist.length === 0) return;
+
+    // 获取所有丢弃的标签页
+    const tabs = await chrome.tabs.query({ discarded: true });
+    for (const tab of tabs) {
+      const isWhitelisted = whitelist.some(pattern => {
+        return (tab.url && tab.url.includes(pattern)) || (tab.title && tab.title.includes(pattern));
+      });
+      
+      if (isWhitelisted) {
+        await ungroupIfNapped(tab.id);
+      }
+    }
+  } catch (e) {
+    console.error('Error waking up tabs by whitelist:', e);
+  }
+}
+
+/**
+ * 唤醒所有已休眠的标签页
+ */
+async function wakeUpAllTabs() {
+  try {
+    const tabs = await chrome.tabs.query({ discarded: true });
+    for (const tab of tabs) {
+      await ungroupIfNapped(tab.id);
+    }
+  } catch (e) {
+    console.error('Error waking up all tabs:', e);
+  }
+}
+
+/**
+ * 检查所有非活动标签页并休眠
+ */
 async function checkAndNapTabs(force = false) {
   const settings = await chrome.storage.local.get({
     timeout: DEFAULT_TIMEOUT,
     excludeAudio: true,
-    whitelist: ''
+    whitelist: '',
+    awakenedTabsData: {}
   });
   
   const timeoutMs = settings.timeout * 60 * 1000;
@@ -352,7 +461,9 @@ async function checkAndNapTabs(force = false) {
       }
     }
 
-    const lastActive = tab.lastAccessed || now;
+    // 计算空闲时间：取 (最近访问时间) 和 (最近唤醒时间) 中的较大值
+    const awakenedAt = settings.awakenedTabsData[tab.id]?.awakenedAt || 0;
+    const lastActive = Math.max(tab.lastAccessed || 0, awakenedAt);
     const timeSinceActive = now - lastActive;
 
     // 如果是强制触发，或者超过了时间
@@ -438,10 +549,16 @@ async function napTab(tab) {
     // 4. 丢弃标签页以释放内存
     await chrome.tabs.discard(tab.id);
     
-    // 5. 记录休眠时间
-    const data = await chrome.storage.local.get({ nappedTabsData: {} });
+    // 5. 记录休眠时间，并清理唤醒时间记录
+    const data = await chrome.storage.local.get({ nappedTabsData: {}, awakenedTabsData: {} });
     data.nappedTabsData[tab.id] = { nappedAt: Date.now() };
-    await chrome.storage.local.set({ nappedTabsData: data.nappedTabsData });
+    if (data.awakenedTabsData[tab.id]) {
+      delete data.awakenedTabsData[tab.id];
+    }
+    await chrome.storage.local.set({ 
+      nappedTabsData: data.nappedTabsData,
+      awakenedTabsData: data.awakenedTabsData
+    });
     
     console.log(`Tab ${tab.id} has been napped and moved to archive.`);
   } catch (e) {

@@ -1,0 +1,15 @@
+{
+  "name": "tab-nap",
+  "version": "1.0.0",
+  "description": "Browser extension to manage tabs",
+  "main": "background.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.3.0",
+    "vite": "^6.4.1",
+    "web-ext": "^8.3.0"
+  }
+}

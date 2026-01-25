@@ -14,6 +14,9 @@
   "nappedTabs": {
     "message": "已休眠标签:"
   },
+  "wakeUpAll": {
+    "message": "立即激活所有休眠标签"
+  },
   "napNow": {
     "message": "立即休眠非活跃标签"
   },
@@ -41,6 +44,9 @@
   "statusSaved": {
     "message": "设置已保存。"
   },
+  "invalidTimeout": {
+    "message": "请输入有效的分钟数（至少 1 分钟）"
+  },
   "minutes": {
     "message": "分钟"
   },
@@ -65,11 +71,23 @@
   "removeFromWhitelist": {
     "message": "移出白名单"
   },
+  "napSingleTab": {
+    "message": "休眠"
+  },
+  "wakeUpSingleTab": {
+    "message": "立即激活"
+  },
   "seconds": {
     "message": "秒"
   },
   "tabListTitle": {
     "message": "标签页状态"
+  },
+  "tabActive": {
+    "message": "正在运行"
+  },
+  "tabNapped": {
+    "message": "已休眠"
   },
   "pinnedStatus": {
     "message": "已固定"

@@ -14,6 +14,9 @@
   "nappedTabs": {
     "message": "Napped Tabs:"
   },
+  "wakeUpAll": {
+    "message": "Wake Up All Napped Tabs"
+  },
   "napNow": {
     "message": "Nap Inactive Tabs Now"
   },
@@ -41,6 +44,9 @@
   "statusSaved": {
     "message": "Settings saved."
   },
+  "invalidTimeout": {
+    "message": "Please enter a valid number of minutes (at least 1)"
+  },
   "minutes": {
     "message": "mins"
   },
@@ -65,11 +71,23 @@
   "removeFromWhitelist": {
     "message": "Remove from Whitelist"
   },
+  "napSingleTab": {
+    "message": "Nap"
+  },
+  "wakeUpSingleTab": {
+    "message": "Wake Up"
+  },
   "seconds": {
     "message": "s"
   },
   "tabListTitle": {
     "message": "Tab Status"
+  },
+  "tabActive": {
+    "message": "Running"
+  },
+  "tabNapped": {
+    "message": "Hibernated"
   },
   "pinnedStatus": {
     "message": "Pinned"
