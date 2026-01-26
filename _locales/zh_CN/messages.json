@@ -30,13 +30,25 @@
     "message": "TabNap 设置"
   },
   "timeoutLabel": {
-    "message": "休眠等待时间 (分钟):"
+    "message": "自动休眠 (分钟)"
+  },
+  "autoCloseTimeoutLabel": {
+    "message": "自动关闭 (分钟)"
   },
   "keepActiveLabel": {
-    "message": "保留最近活跃的标签页不休眠 (个):"
+    "message": "保持最近打开的标签页 (个)"
+  },
+  "timeoutHelp": {
+    "message": "标签闲置N分钟后将自动进入休眠，归档在Nap分组下，填写0表示不休眠"
+  },
+  "autoCloseHelp": {
+    "message": "标签闲置N分钟后将自动被关闭"
+  },
+  "keepActiveHelp": {
+    "message": "最近打开的N个标签页将始终保持激活，不会进入休眠或关闭"
   },
   "excludeAudioLabel": {
-    "message": "不休眠正在播放声音的标签页"
+    "message": "保持正在播放声音的标签页"
   },
   "whitelistLabel": {
     "message": "白名单 (每行一个关键词或域名):"
@@ -94,6 +106,12 @@
   },
   "tabNapped": {
     "message": "已休眠"
+  },
+  "back": {
+    "message": "返回"
+  },
+  "closePanel": {
+    "message": "关闭面板"
   },
   "pinnedStatus": {
     "message": "已固定"

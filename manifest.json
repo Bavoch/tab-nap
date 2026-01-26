@@ -9,7 +9,8 @@
     "storage",
     "alarms",
     "tabGroups",
-    "scripting"
+    "scripting",
+    "favicon"
   ],
   "host_permissions": [
     "<all_urls>"

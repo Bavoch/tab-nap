@@ -1,5 +1,6 @@
 // 默认配置
 const DEFAULT_TIMEOUT = 10; // 10 分钟
+const DEFAULT_AUTO_CLOSE_TIMEOUT = 0; // 默认不自动关闭
 const DEFAULT_KEEP_ACTIVE = 5; // 默认保留最近活跃的 5 个标签页不休眠
 const BASE_NAP_TITLE = chrome.i18n.getMessage('napGroupTitle') || "😴 Nap";
 const CHECK_INTERVAL = 0.16; // 每 10 秒左右检查一次 (6/60 = 0.1)
@@ -78,9 +79,10 @@ async function updateAllNapGroups() {
 
 // 初始化函数
 async function initialize() {
-  const result = await chrome.storage.local.get(['timeout', 'excludeAudio', 'whitelist', 'activeTabsToKeep']);
+  const result = await chrome.storage.local.get(['timeout', 'autoCloseTimeout', 'excludeAudio', 'whitelist', 'activeTabsToKeep']);
   const defaults = {};
   if (result.timeout === undefined) defaults.timeout = DEFAULT_TIMEOUT;
+  if (result.autoCloseTimeout === undefined) defaults.autoCloseTimeout = DEFAULT_AUTO_CLOSE_TIMEOUT;
   if (result.excludeAudio === undefined) defaults.excludeAudio = true;
   if (result.whitelist === undefined) defaults.whitelist = '';
   if (result.activeTabsToKeep === undefined) defaults.activeTabsToKeep = DEFAULT_KEEP_ACTIVE;
@@ -183,18 +185,29 @@ chrome.runtime.onStartup.addListener(initialize);
 initialize();
 
 // 监听扩展图标点击事件
-chrome.action.onClicked.addListener((tab) => {
-  // 向当前标签页发送消息，切换侧边栏显示
-  chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' }).catch(() => {
-    // 如果页面没加载 content script（如 chrome:// 页面），可以回退到其他方案
-    // 这里简单忽略，或者可以考虑注入 content script
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['content.js']
-    }).then(() => {
-      chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
-    }).catch(err => console.error('Failed to inject content script:', err));
-  });
+chrome.action.onClicked.addListener(async (tab) => {
+  try {
+    // 首先尝试发送消息
+    await chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
+  } catch (err) {
+    // 如果消息发送失败（通常是因为 content script 还没注入或上下文已失效）
+    // 检查是否是因为扩展上下文失效
+    if (err.message && (err.message.includes('Extension context invalidated') || err.message.includes('Could not establish connection'))) {
+      console.log('Extension context invalidated or not loaded, attempting to re-inject...');
+    }
+    
+    try {
+      // 尝试重新注入 content script
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js']
+      });
+      // 注入成功后再次尝试发送消息
+      await chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
+    } catch (injectErr) {
+      console.error('Failed to inject or communicate with content script:', injectErr.message);
+    }
+  }
 });
 
 /**
@@ -463,27 +476,36 @@ async function wakeUpAllTabs() {
 async function checkAndNapTabs(force = false) {
   const settings = await chrome.storage.local.get({
     timeout: DEFAULT_TIMEOUT,
+    autoCloseTimeout: DEFAULT_AUTO_CLOSE_TIMEOUT,
     excludeAudio: true,
     whitelist: '',
     awakenedTabsData: {},
-    activeTabsToKeep: DEFAULT_KEEP_ACTIVE
+    activeTabsToKeep: DEFAULT_KEEP_ACTIVE,
+    enableAutoSleep: null,
+    enableAutoClose: null,
+    enableKeepActive: null
   });
   
   const timeoutMs = settings.timeout * 60 * 1000;
+  const autoCloseTimeoutMs = settings.autoCloseTimeout * 60 * 1000;
   const now = Date.now();
   const whitelist = settings.whitelist.split('\n')
     .map(s => s.trim())
     .filter(s => s.length > 0);
 
-  // 获取所有非活动、非固定、非休眠的标签页
+  // 开关状态（兼容旧配置：如果未设置开关，则按原数值判断）
+  const enableAutoSleep = settings.enableAutoSleep ?? true;
+  const enableAutoClose = settings.enableAutoClose ?? (settings.autoCloseTimeout > 0);
+  const enableKeepActive = settings.enableKeepActive ?? (settings.activeTabsToKeep > 0);
+
+  // 获取所有非活动、非固定标签页
   let tabs = await chrome.tabs.query({ 
     active: false, 
-    pinned: false, 
-    discarded: false 
+    pinned: false
   });
 
   // 如果设置了保留最近活跃的标签页
-  if (settings.activeTabsToKeep > 0) {
+  if (enableKeepActive && settings.activeTabsToKeep > 0) {
     // 按最后访问时间降序排序（最近访问的在前）
     tabs.sort((a, b) => {
       const aAwakenedAt = settings.awakenedTabsData[a.id]?.awakenedAt || 0;
@@ -496,9 +518,9 @@ async function checkAndNapTabs(force = false) {
     });
 
     // 排除掉最近活跃的前 N 个标签页
-    // 注意：这里只处理非活动标签页。活动标签页本身就已经被 query 过滤掉了。
-    // 所以这里的逻辑是：在非活动标签页中，再保护最近访问的 N 个。
-    tabs = tabs.slice(settings.activeTabsToKeep);
+    // 只有非休眠标签页才受此保护，已休眠的如果达到自动关闭时间应该关闭
+    const protectedTabIds = new Set(tabs.slice(0, settings.activeTabsToKeep).map(t => t.id));
+    tabs = tabs.filter(t => !protectedTabIds.has(t.id));
   }
 
   for (const tab of tabs) {
@@ -515,7 +537,7 @@ async function checkAndNapTabs(force = false) {
     // 检查白名单过滤
     if (whitelist.length > 0) {
       const isWhitelisted = whitelist.some(pattern => {
-        return tab.url.includes(pattern) || tab.title.includes(pattern);
+        return (tab.url && tab.url.includes(pattern)) || (tab.title && tab.title.includes(pattern));
       });
       if (isWhitelisted) {
         continue;
@@ -527,37 +549,61 @@ async function checkAndNapTabs(force = false) {
     const lastActive = Math.max(tab.lastAccessed || 0, awakenedAt);
     const timeSinceActive = now - lastActive;
 
-    // 如果是强制触发，或者超过了时间
-    if (force || (timeSinceActive > timeoutMs)) {
-      await napTab(tab);
-    } else if (timeSinceActive > timeoutMs - WARNING_THRESHOLD) {
-      // 如果即将进入休眠（10秒内）
-      await setTabTitle(tab.id, WARNING_TEXT);
-      
-      // 如果还没有设置精确倒计时，则设置一个
-      if (!tabNapTimeouts.has(tab.id)) {
-        const remainingMs = timeoutMs - timeSinceActive;
-        const timeoutId = setTimeout(async () => {
-          tabNapTimeouts.delete(tab.id);
-          // 重新获取标签页状态，确保它仍然符合休眠条件
-          try {
-            const currentTab = await chrome.tabs.get(tab.id);
-            if (!currentTab.active && !currentTab.discarded) {
-              await napTab(currentTab);
-            }
-          } catch (e) {
-            // 标签页可能已关闭
-          }
-        }, remainingMs);
-        tabNapTimeouts.set(tab.id, timeoutId);
+    // 优先处理自动关闭
+    if (enableAutoClose && settings.autoCloseTimeout > 0 && timeSinceActive > autoCloseTimeoutMs) {
+      try {
+        await chrome.tabs.remove(tab.id);
+        console.log(`Tab ${tab.id} auto-closed due to inactivity.`);
+        continue; // 标签已关闭，跳过后续休眠检查
+      } catch (e) {
+        console.debug('Failed to auto-close tab:', e.message);
       }
-    } else {
-      // 还没到休眠时间，且不在预警范围内
-      await restoreTabTitle(tab.id);
-      // 如果有正在运行的倒计时，清除它
-      if (tabNapTimeouts.has(tab.id)) {
-        clearTimeout(tabNapTimeouts.get(tab.id));
-        tabNapTimeouts.delete(tab.id);
+    }
+
+    // 如果还没被关闭，再检查是否需要休眠 (仅针对非 discarded 标签)
+    if (!tab.discarded) {
+      // 如果是强制触发，或者超过了时间
+      if (enableAutoSleep && (force || (timeSinceActive > timeoutMs))) {
+        await napTab(tab);
+      } else if (enableAutoSleep && timeSinceActive > timeoutMs - WARNING_THRESHOLD) {
+        // 如果即将进入休眠（10秒内）
+        await setTabTitle(tab.id, WARNING_TEXT);
+        
+        // 如果还没有设置精确倒计时，则设置一个
+        if (!tabNapTimeouts.has(tab.id)) {
+          const remainingMs = timeoutMs - timeSinceActive;
+          const timeoutId = setTimeout(async () => {
+            tabNapTimeouts.delete(tab.id);
+            // 重新获取标签页状态，确保它仍然符合休眠条件
+            try {
+              const currentTab = await chrome.tabs.get(tab.id);
+              if (!currentTab.active && !currentTab.discarded) {
+                // 在精确倒计时结束时，也要先检查一次是否应该直接关闭
+                const settingsNow = await chrome.storage.local.get({ autoCloseTimeout: 0, enableAutoClose: null });
+                const currentNow = Date.now();
+                const currentAwakenedAt = (await chrome.storage.local.get({ awakenedTabsData: {} })).awakenedTabsData[tab.id]?.awakenedAt || 0;
+                const currentLastActive = Math.max(currentTab.lastAccessed || 0, currentAwakenedAt);
+                const enableCloseNow = settingsNow.enableAutoClose ?? (settingsNow.autoCloseTimeout > 0);
+                if (enableCloseNow && settingsNow.autoCloseTimeout > 0 && (currentNow - currentLastActive) > (settingsNow.autoCloseTimeout * 60 * 1000)) {
+                  await chrome.tabs.remove(currentTab.id);
+                  return;
+                }
+                await napTab(currentTab);
+              }
+            } catch (e) {
+              // 标签页可能已关闭
+            }
+          }, remainingMs);
+          tabNapTimeouts.set(tab.id, timeoutId);
+        }
+      } else {
+        // 还没到休眠时间，且不在预警范围内
+        await restoreTabTitle(tab.id);
+        // 如果有正在运行的倒计时，清除它
+        if (tabNapTimeouts.has(tab.id)) {
+          clearTimeout(tabNapTimeouts.get(tab.id));
+          tabNapTimeouts.delete(tab.id);
+        }
       }
     }
   }

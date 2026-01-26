@@ -26,7 +26,13 @@ import './content.css';
     }
   }
 
+  function isContextValid() {
+    return !!chrome.runtime?.id;
+  }
+
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (!isContextValid()) return;
+    
     if (request.action === 'togglePanel') {
       togglePanel();
       sendResponse({ status: 'done' });
@@ -37,6 +43,14 @@ import './content.css';
   window.addEventListener('message', (event) => {
     if (event.data === 'closeTabNapPanel') {
       togglePanel(false);
+      return;
+    }
+    if (event.data && event.data.type === 'tabNapResize') {
+      const nextHeight = Math.min(Number(event.data.height) || 0, 550);
+      if (nextHeight > 0) {
+        root.style.height = `${nextHeight}px`;
+        iframe.style.height = `${nextHeight}px`;
+      }
     }
   });
 })();

@@ -30,13 +30,25 @@
     "message": "TabNap Settings"
   },
   "timeoutLabel": {
-    "message": "Sleep Timeout (minutes):"
+    "message": "Auto Sleep (minutes)"
+  },
+  "autoCloseTimeoutLabel": {
+    "message": "Auto Close (minutes)"
   },
   "keepActiveLabel": {
-    "message": "Keep recent active tabs awake (count):"
+    "message": "Keep Recently Opened Tabs (count)"
+  },
+  "timeoutHelp": {
+    "message": "Tabs idle for N minutes will sleep and be archived under the Nap group; enter 0 to disable."
+  },
+  "autoCloseHelp": {
+    "message": "Tabs idle for N minutes will be closed automatically."
+  },
+  "keepActiveHelp": {
+    "message": "The most recent N tabs stay active and will not sleep or close."
   },
   "excludeAudioLabel": {
-    "message": "Don't sleep tabs playing audio"
+    "message": "Keep Tabs Playing Audio"
   },
   "whitelistLabel": {
     "message": "Whitelist (one keyword/domain per line):"
@@ -94,6 +106,12 @@
   },
   "tabNapped": {
     "message": "Hibernated"
+  },
+  "back": {
+    "message": "Back"
+  },
+  "closePanel": {
+    "message": "Close Panel"
   },
   "pinnedStatus": {
     "message": "Pinned"

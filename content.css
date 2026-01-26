@@ -3,8 +3,8 @@
   position: fixed;
   top: 20px;
   right: 20px;
-  width: 400px;
-  height: 700px;
+  width: 350px;
+  height: auto;
   z-index: 2147483647;
   
   /* Initial state */
@@ -19,7 +19,7 @@
   border-radius: 16px;
   border: 1px solid rgba(0,0,0,0.05);
   overflow: hidden;
-  max-height: calc(100vh - 40px);
+  max-height: min(550px, calc(100vh - 40px));
 }
 
 #tab-nap-root.active {
