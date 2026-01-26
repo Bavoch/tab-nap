@@ -1,6 +1,7 @@
 const DEFAULT_TIMEOUT = 10;
 const DEFAULT_EXCLUDE_AUDIO = true;
 const DEFAULT_WHITELIST = '';
+const DEFAULT_KEEP_ACTIVE = 5;
 let updateInterval;
 let currentTabType = 'napped'; // 'active' or 'napped'
 
@@ -49,6 +50,7 @@ function showSettingsView() {
 function saveOptions() {
   const timeoutInput = document.getElementById('timeout');
   const timeout = parseInt(timeoutInput.value, 10);
+  const activeTabsToKeep = parseInt(document.getElementById('activeTabsToKeep').value, 10);
   const excludeAudio = document.getElementById('excludeAudio').checked;
   const whitelist = document.getElementById('whitelist').value;
   
@@ -60,6 +62,7 @@ function saveOptions() {
 
   chrome.storage.local.set({
     timeout: timeout,
+    activeTabsToKeep: activeTabsToKeep,
     excludeAudio: excludeAudio,
     whitelist: whitelist
   }, () => {
@@ -77,10 +80,12 @@ function saveOptions() {
 function restoreOptions() {
   chrome.storage.local.get({
     timeout: DEFAULT_TIMEOUT,
+    activeTabsToKeep: DEFAULT_KEEP_ACTIVE,
     excludeAudio: DEFAULT_EXCLUDE_AUDIO,
     whitelist: DEFAULT_WHITELIST
   }, (items) => {
     document.getElementById('timeout').value = items.timeout;
+    document.getElementById('activeTabsToKeep').value = items.activeTabsToKeep;
     document.getElementById('excludeAudio').checked = items.excludeAudio;
     document.getElementById('whitelist').value = items.whitelist;
   });
@@ -147,13 +152,9 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
   
   const tabItem = document.createElement('div');
   tabItem.className = 'tab-item';
-  if (isCurrentViewing) {
-    tabItem.style.backgroundColor = 'var(--bg-secondary)'; // 高亮当前标签页
-    tabItem.style.border = '1px solid var(--border-color)';
-  }
   
   if (isCompact) {
-    tabItem.style.padding = '8px 12px';
+    tabItem.style.padding = '8px 10px';
   }
   
   // Favicon container
@@ -182,7 +183,7 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
     info.style.display = 'flex';
     info.style.alignItems = 'center';
     info.style.justifyContent = 'space-between';
-    info.style.gap = '12px';
+    info.style.gap = '10px';
   }
   
   const title = document.createElement('div');
@@ -205,7 +206,9 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
       timeSpan.classList.add('napped');
       const nappedAt = settings.nappedTabsData[tab.id]?.nappedAt;
       if (nappedAt) {
-        timeSpan.textContent = `${chrome.i18n.getMessage('nappedFor')}: ${formatTime(now - nappedAt)}`;
+        // Shorten the message for compact view
+        const nappedForMsg = chrome.i18n.getMessage('nappedFor') || 'Napped';
+        timeSpan.textContent = `${nappedForMsg}: ${formatTime(now - nappedAt)}`;
       } else {
         timeSpan.textContent = chrome.i18n.getMessage('nappedFor');
       }
@@ -219,7 +222,8 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
       const awakenedAt = settings.awakenedTabsData[tab.id]?.awakenedAt || 0;
       const lastActive = Math.max(tab.lastAccessed || now, awakenedAt);
       const remaining = timeoutMs - (now - lastActive);
-      timeSpan.textContent = `${chrome.i18n.getMessage('nappingIn')}: ${formatTime(remaining)}`;
+      const nappingInMsg = chrome.i18n.getMessage('nappingIn') || 'In';
+      timeSpan.textContent = `${nappingInMsg}: ${formatTime(remaining)}`;
       timeSpan.classList.add('countdown');
     }
   }
@@ -231,7 +235,9 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
     // 已休眠列表：立即激活按钮
     const wakeBtn = document.createElement('button');
     wakeBtn.className = 'action-btn wake-btn';
-    wakeBtn.textContent = chrome.i18n.getMessage('wakeUpSingleTab') || 'Wake Up';
+    // Use icon for compact view
+    wakeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
+    wakeBtn.title = chrome.i18n.getMessage('wakeUpSingleTab') || 'Wake Up';
     wakeBtn.onclick = (e) => {
       e.stopPropagation();
       chrome.runtime.sendMessage({ action: 'wakeUpSingleTab', tabId: tab.id });
@@ -244,7 +250,9 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
     if (!isCurrentViewing || isCompact) {
       const napBtn = document.createElement('button');
       napBtn.className = 'action-btn nap-btn';
-      napBtn.textContent = chrome.i18n.getMessage('napSingleTab') || 'Nap';
+      // Use icon for compact view
+      napBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
+      napBtn.title = chrome.i18n.getMessage('napSingleTab') || 'Nap';
       napBtn.onclick = (e) => {
         e.stopPropagation();
         chrome.runtime.sendMessage({ action: 'napSingleTab', tabId: tab.id });
@@ -256,7 +264,11 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
 
   const wlBtn = document.createElement('button');
   wlBtn.className = `whitelist-btn ${isWhitelisted ? 'active' : ''}`;
-  wlBtn.textContent = isWhitelisted 
+  // Use icon for compact view
+  wlBtn.innerHTML = isWhitelisted 
+    ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+    : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path></svg>';
+  wlBtn.title = isWhitelisted 
     ? chrome.i18n.getMessage('removeFromWhitelist') 
     : chrome.i18n.getMessage('addToWhitelist');
   
@@ -297,11 +309,6 @@ async function updatePopup() {
   });
   
   const timeoutMs = settings.timeout * 60 * 1000;
-  const timeoutText = settings.timeout === 0 
-    ? chrome.i18n.getMessage('never')
-    : `${settings.timeout} ${chrome.i18n.getMessage('minutes')}`;
-  
-  document.getElementById('timeout-val').textContent = timeoutText;
 
   const whitelist = settings.whitelist.split('\n').map(s => s.trim()).filter(s => s.length > 0);
   
@@ -313,6 +320,8 @@ async function updatePopup() {
   const tabListContainer = document.getElementById('tab-list');
   const activeTabContainer = document.getElementById('active-tab-container');
   const activeTabSection = document.getElementById('active-tab-section');
+  const searchInput = document.getElementById('tab-search');
+  const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
   
   const now = Date.now();
 
@@ -320,7 +329,11 @@ async function updatePopup() {
   const nappedTabs = allTabs.filter(t => t.discarded && !t.pinned);
   const activeTabs = allTabs.filter(t => !t.discarded && !t.pinned);
   
-  document.getElementById('napped-count').textContent = nappedTabs.length;
+  // 更新标签栏标题和数量
+  const nappedLabel = chrome.i18n.getMessage('tabNapped') || 'Hibernated';
+  const activeLabel = chrome.i18n.getMessage('tabActive') || 'Running';
+  document.getElementById('tab-napped').textContent = `${nappedLabel} (${nappedTabs.length})`;
+  document.getElementById('tab-active').textContent = `${activeLabel} (${activeTabs.length})`;
 
   // 找到当前激活的标签页
   const currentTab = allTabs.find(t => t.active && t.windowId === currentWindow.id);
@@ -336,12 +349,37 @@ async function updatePopup() {
 
   // 决定显示哪些标签页
   let displayTabs = currentTabType === 'active' ? activeTabs : nappedTabs;
-  
-  // 如果当前激活的标签页在列表中，将其移除（因为它已经单独显示在上面了）
-  if (currentTab) {
-    displayTabs = displayTabs.filter(t => t.id !== currentTab.id);
-  }
 
+  // 搜索过滤
+  if (searchTerm) {
+    // 搜索时，如果在当前分类找不到结果，但另一分类有结果，可能需要提示或自动切换（此处简单实现仅过滤当前视图）
+    // 或者，更友好的体验是搜索时显示所有匹配结果，无论休眠状态。
+    // 但为了保持 UI 结构，我们先仅过滤当前列表。
+    // 用户需求是“搜索所有标签页”，所以这里我们应该合并搜索。
+    
+    // 如果有搜索词，忽略 currentTabType，显示所有匹配项
+    // 并且隐藏 tab-switcher 以避免混淆，或者高亮所有匹配项
+    // 这里我们采用：搜索时显示所有匹配项，不分 napped/active
+    
+    // 隐藏 tab switcher 和 active tab section 当搜索时
+    document.querySelector('.tab-switcher').classList.add('hidden');
+    document.getElementById('active-tab-section').classList.add('hidden');
+    document.getElementById('wake-up-all').style.display = 'none';
+
+    displayTabs = allTabs.filter(t => {
+      const title = (t.title || '').toLowerCase();
+      const url = (t.url || '').toLowerCase();
+      return title.includes(searchTerm) || url.includes(searchTerm);
+    });
+  } else {
+    // 无搜索词，恢复默认显示
+    document.querySelector('.tab-switcher').classList.remove('hidden');
+    if (currentTab) {
+      document.getElementById('active-tab-section').classList.remove('hidden');
+    }
+    // 恢复 wake up all 按钮显示逻辑 (将在下面处理)
+  }
+  
   // 排序：按最后访问时间降序（最近访问的在前）
   displayTabs.sort((a, b) => {
     const aTime = a.lastAccessed || 0;
@@ -350,13 +388,22 @@ async function updatePopup() {
   });
 
   tabListContainer.innerHTML = '';
-  for (const tab of displayTabs) {
-    tabListContainer.appendChild(createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs));
+  if (displayTabs.length === 0 && searchTerm) {
+      const noResult = document.createElement('div');
+      noResult.style.textAlign = 'center';
+      noResult.style.padding = '20px';
+      noResult.style.color = 'var(--text-secondary)';
+      noResult.textContent = 'No tabs found';
+      tabListContainer.appendChild(noResult);
+  } else {
+      for (const tab of displayTabs) {
+        tabListContainer.appendChild(createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs));
+      }
   }
 
   // 控制“立即激活所有”按钮的显示
   const wakeUpAllBtn = document.getElementById('wake-up-all');
-  if (currentTabType === 'napped' && nappedTabs.length > 0) {
+  if (!searchTerm && currentTabType === 'napped' && nappedTabs.length > 0) {
     wakeUpAllBtn.style.display = 'block';
   } else {
     wakeUpAllBtn.style.display = 'none';
@@ -373,12 +420,16 @@ document.getElementById('open-settings').addEventListener('click', showSettingsV
 document.getElementById('back-to-main').addEventListener('click', showMainView);
 document.getElementById('save-settings').addEventListener('click', saveOptions);
 document.getElementById('close-popup').addEventListener('click', () => {
-  if (window.parent !== window) {
-    window.parent.postMessage('closeTabNapPanel', '*');
-  } else {
-    window.close();
-  }
-});
+    if (window.parent !== window) {
+      window.parent.postMessage('closeTabNapPanel', '*');
+    } else {
+      window.close();
+    }
+  });
+
+  document.getElementById('tab-search').addEventListener('input', () => {
+    updatePopup();
+  });
 
 document.getElementById('tab-active').addEventListener('click', () => {
   currentTabType = 'active';

@@ -1,5 +1,6 @@
 // 默认配置
 const DEFAULT_TIMEOUT = 10; // 10 分钟
+const DEFAULT_KEEP_ACTIVE = 5; // 默认保留最近活跃的 5 个标签页不休眠
 const BASE_NAP_TITLE = chrome.i18n.getMessage('napGroupTitle') || "😴 Nap";
 const CHECK_INTERVAL = 0.16; // 每 10 秒左右检查一次 (6/60 = 0.1)
 const WARNING_TEXT = chrome.i18n.getMessage('warningText') || "即将休眠...";
@@ -77,11 +78,12 @@ async function updateAllNapGroups() {
 
 // 初始化函数
 async function initialize() {
-  const result = await chrome.storage.local.get(['timeout', 'excludeAudio', 'whitelist']);
+  const result = await chrome.storage.local.get(['timeout', 'excludeAudio', 'whitelist', 'activeTabsToKeep']);
   const defaults = {};
   if (result.timeout === undefined) defaults.timeout = DEFAULT_TIMEOUT;
   if (result.excludeAudio === undefined) defaults.excludeAudio = true;
   if (result.whitelist === undefined) defaults.whitelist = '';
+  if (result.activeTabsToKeep === undefined) defaults.activeTabsToKeep = DEFAULT_KEEP_ACTIVE;
   
   if (Object.keys(defaults).length > 0) {
     await chrome.storage.local.set(defaults);
@@ -351,6 +353,44 @@ chrome.tabs.onAttached.addListener(async () => {
   await updateAllNapGroups();
 });
 
+// 监听设置变化
+chrome.storage.onChanged.addListener(async (changes, areaName) => {
+  if (areaName === 'local' && changes.timeout && changes.timeout.newValue !== changes.timeout.oldValue) {
+    console.log('Timeout setting changed, resetting all timers...');
+    await resetAllTimers();
+  }
+});
+
+/**
+ * 重置所有标签页的休眠计时
+ */
+async function resetAllTimers() {
+  try {
+    const tabs = await chrome.tabs.query({ discarded: false });
+    const data = await chrome.storage.local.get({ awakenedTabsData: {} });
+    const now = Date.now();
+    
+    for (const tab of tabs) {
+      // 1. 清除预警倒计时
+      if (tabNapTimeouts.has(tab.id)) {
+        clearTimeout(tabNapTimeouts.get(tab.id));
+        tabNapTimeouts.delete(tab.id);
+      }
+      
+      // 2. 恢复标题
+      await restoreTabTitle(tab.id);
+      
+      // 3. 更新唤醒时间，从而重置倒计时
+      data.awakenedTabsData[tab.id] = { awakenedAt: now };
+    }
+    
+    await chrome.storage.local.set({ awakenedTabsData: data.awakenedTabsData });
+    console.log('All timers have been reset.');
+  } catch (e) {
+    console.error('Error resetting timers:', e);
+  }
+}
+
 // 闹钟触发：检查并休眠标签页
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'checkIdleTabs') {
@@ -425,7 +465,8 @@ async function checkAndNapTabs(force = false) {
     timeout: DEFAULT_TIMEOUT,
     excludeAudio: true,
     whitelist: '',
-    awakenedTabsData: {}
+    awakenedTabsData: {},
+    activeTabsToKeep: DEFAULT_KEEP_ACTIVE
   });
   
   const timeoutMs = settings.timeout * 60 * 1000;
@@ -434,11 +475,31 @@ async function checkAndNapTabs(force = false) {
     .map(s => s.trim())
     .filter(s => s.length > 0);
 
-  const tabs = await chrome.tabs.query({ 
+  // 获取所有非活动、非固定、非休眠的标签页
+  let tabs = await chrome.tabs.query({ 
     active: false, 
     pinned: false, 
     discarded: false 
   });
+
+  // 如果设置了保留最近活跃的标签页
+  if (settings.activeTabsToKeep > 0) {
+    // 按最后访问时间降序排序（最近访问的在前）
+    tabs.sort((a, b) => {
+      const aAwakenedAt = settings.awakenedTabsData[a.id]?.awakenedAt || 0;
+      const aLastActive = Math.max(a.lastAccessed || 0, aAwakenedAt);
+      
+      const bAwakenedAt = settings.awakenedTabsData[b.id]?.awakenedAt || 0;
+      const bLastActive = Math.max(b.lastAccessed || 0, bAwakenedAt);
+      
+      return bLastActive - aLastActive;
+    });
+
+    // 排除掉最近活跃的前 N 个标签页
+    // 注意：这里只处理非活动标签页。活动标签页本身就已经被 query 过滤掉了。
+    // 所以这里的逻辑是：在非活动标签页中，再保护最近访问的 N 个。
+    tabs = tabs.slice(settings.activeTabsToKeep);
+  }
 
   for (const tab of tabs) {
     // 再次检查是否为固定标签页（双重保险）

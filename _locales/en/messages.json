@@ -6,7 +6,10 @@
     "message": "Automatically sleep inactive tabs and archive them to the far left."
   },
   "popupTitle": {
-    "message": "😴 TabNap"
+    "message": "TabNap"
+  },
+  "searchPlaceholder": {
+    "message": "Search tabs..."
   },
   "currentConfig": {
     "message": "Current Config:"
@@ -24,10 +27,13 @@
     "message": "Open Options"
   },
   "optionsTitle": {
-    "message": "😴 TabNap Settings"
+    "message": "TabNap Settings"
   },
   "timeoutLabel": {
     "message": "Sleep Timeout (minutes):"
+  },
+  "keepActiveLabel": {
+    "message": "Keep recent active tabs awake (count):"
   },
   "excludeAudioLabel": {
     "message": "Don't sleep tabs playing audio"

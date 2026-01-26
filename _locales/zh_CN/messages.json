@@ -6,7 +6,10 @@
     "message": "自动休眠长时间不用的标签页并将其归档到最左侧。"
   },
   "popupTitle": {
-    "message": "😴 TabNap"
+    "message": "TabNap"
+  },
+  "searchPlaceholder": {
+    "message": "搜索标签页..."
   },
   "currentConfig": {
     "message": "当前配置:"
@@ -24,10 +27,13 @@
     "message": "打开设置"
   },
   "optionsTitle": {
-    "message": "😴 TabNap 设置"
+    "message": "TabNap 设置"
   },
   "timeoutLabel": {
     "message": "休眠等待时间 (分钟):"
+  },
+  "keepActiveLabel": {
+    "message": "保留最近活跃的标签页不休眠 (个):"
   },
   "excludeAudioLabel": {
     "message": "不休眠正在播放声音的标签页"
