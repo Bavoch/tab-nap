@@ -1,5 +1,5 @@
 const DEFAULT_TIMEOUT = 10;
-const DEFAULT_AUTO_CLOSE_TIMEOUT = 0;
+const DEFAULT_AUTO_CLOSE_TIMEOUT = 300;
 const DEFAULT_EXCLUDE_AUDIO = true;
 const DEFAULT_WHITELIST = '';
 const DEFAULT_KEEP_ACTIVE = 5;
@@ -22,6 +22,7 @@ function translatePage() {
     const message = chrome.i18n.getMessage(key);
     if (message) {
       el.dataset.tooltip = message;
+      el.setAttribute('aria-label', message);
       el.removeAttribute('title');
     }
     
@@ -57,8 +58,21 @@ function showSettingsView() {
   setTimeout(postPopupSize, 0);
 }
 
+// 自动保存相关的防抖函数
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 // 保存设置
-function saveOptions() {
+function saveOptions(silent = false) {
   const timeoutInput = document.getElementById('timeout');
   const timeout = parseInt(timeoutInput.value, 10);
   const autoCloseTimeout = parseInt(document.getElementById('autoCloseTimeout').value, 10);
@@ -69,23 +83,10 @@ function saveOptions() {
   const enableKeepActive = document.getElementById('enableKeepActive').checked;
   const whitelist = document.getElementById('whitelist').value;
   
-  if (enableAutoSleep && (isNaN(timeout) || timeout < 1)) {
-    const errorMsg = chrome.i18n.getMessage('invalidTimeout') || 'Please enter a valid number of minutes (at least 1)';
-    alert(errorMsg);
-    return;
-  }
-
-  if (enableAutoClose && (isNaN(autoCloseTimeout) || autoCloseTimeout < 1)) {
-    const errorMsg = 'Please enter a valid number for auto-close timeout';
-    alert(errorMsg);
-    return;
-  }
-  
-  if (enableKeepActive && (isNaN(activeTabsToKeep) || activeTabsToKeep < 1)) {
-    const errorMsg = 'Please enter a valid number for keeping active tabs';
-    alert(errorMsg);
-    return;
-  }
+  // 在实时保存模式下，如果是无效数值，我们可以选择不保存或者恢复旧值，这里先保持逻辑
+  if (enableAutoSleep && (isNaN(timeout) || timeout < 1)) return;
+  if (enableAutoClose && (isNaN(autoCloseTimeout) || autoCloseTimeout < 1)) return;
+  if (enableKeepActive && (isNaN(activeTabsToKeep) || activeTabsToKeep < 1)) return;
 
   chrome.storage.local.set({
     timeout: timeout,
@@ -97,11 +98,13 @@ function saveOptions() {
     enableAutoClose,
     enableKeepActive
   }, () => {
-    const status = document.getElementById('status');
-    status.textContent = chrome.i18n.getMessage('statusSaved');
-    setTimeout(() => {
-      status.textContent = '';
-    }, 2000);
+    if (!silent) {
+      const status = document.getElementById('status');
+      status.textContent = chrome.i18n.getMessage('statusSaved');
+      setTimeout(() => {
+        status.textContent = '';
+      }, 2000);
+    }
     // 同时更新主页面的显示
     updatePopup();
   });
@@ -119,8 +122,16 @@ function restoreOptions() {
     enableAutoClose: null,
     enableKeepActive: null
   }, (items) => {
+    const fields = [
+      'timeout', 'autoCloseTimeout', 'activeTabsToKeep', 
+      'excludeAudio', 'whitelist', 
+      'enableAutoSleep', 'enableAutoClose', 'enableKeepActive'
+    ];
+
     document.getElementById('timeout').value = items.timeout;
-    document.getElementById('autoCloseTimeout').value = items.autoCloseTimeout;
+    let autoCloseTimeout = items.autoCloseTimeout;
+    if (autoCloseTimeout === 0) autoCloseTimeout = DEFAULT_AUTO_CLOSE_TIMEOUT;
+    document.getElementById('autoCloseTimeout').value = autoCloseTimeout;
     document.getElementById('activeTabsToKeep').value = items.activeTabsToKeep;
     document.getElementById('excludeAudio').checked = items.excludeAudio;
     document.getElementById('whitelist').value = items.whitelist;
@@ -133,37 +144,45 @@ function restoreOptions() {
     document.getElementById('enableAutoClose').checked = enableAutoClose;
     document.getElementById('enableKeepActive').checked = enableKeepActive;
     
-    // 根据开关状态启用/禁用数值输入
-    document.getElementById('timeout').disabled = !enableAutoSleep;
-    document.getElementById('autoCloseTimeout').disabled = !enableAutoClose;
-    document.getElementById('activeTabsToKeep').disabled = !enableKeepActive;
+    // 根据开关状态显示/隐藏内容
+    document.getElementById('timeout-content').classList.toggle('hidden', !enableAutoSleep);
+    document.getElementById('autoClose-content').classList.toggle('hidden', !enableAutoClose);
+    document.getElementById('keepActive-content').classList.toggle('hidden', !enableKeepActive);
     
-    // 绑定开关交互
-    document.getElementById('enableAutoSleep').onchange = () => {
-      document.getElementById('timeout').disabled = !document.getElementById('enableAutoSleep').checked;
-    };
-    document.getElementById('enableAutoClose').onchange = () => {
-      document.getElementById('autoCloseTimeout').disabled = !document.getElementById('enableAutoClose').checked;
-    };
-    document.getElementById('enableKeepActive').onchange = () => {
-      document.getElementById('activeTabsToKeep').disabled = !document.getElementById('enableKeepActive').checked;
-    };
+    // 绑定实时保存逻辑
+    const debouncedSave = debounce(() => saveOptions(true), 500);
+
+    fields.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const eventType = (el.type === 'checkbox') ? 'change' : 'input';
+      el.addEventListener(eventType, () => {
+        // 更新显示状态
+        if (id === 'enableAutoSleep') document.getElementById('timeout-content').classList.toggle('hidden', !el.checked);
+        if (id === 'enableAutoClose') document.getElementById('autoClose-content').classList.toggle('hidden', !el.checked);
+        if (id === 'enableKeepActive') document.getElementById('keepActive-content').classList.toggle('hidden', !el.checked);
+
+        debouncedSave();
+      });
+    });
   });
 }
 
-function formatTime(ms) {
+function formatTime(ms, isCountdown = false) {
   if (ms < 0) ms = 0;
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   
-  const minStr = chrome.i18n.getMessage('minutes');
-  const secStr = chrome.i18n.getMessage('seconds');
+  const minStr = chrome.i18n.getMessage('minutes') || 'm';
+  const secStr = chrome.i18n.getMessage('seconds') || 's';
+  const afterSleepStr = isCountdown ? (chrome.i18n.getMessage('afterSleep') || '后休眠') : '';
   
-  if (minutes > 0) {
-    return `${minutes}${minStr}${seconds}${secStr}`;
+  if (minutes >= 1) {
+    return `${minutes}${minStr}${afterSleepStr}`;
   }
-  return `${seconds}${secStr}`;
+  return `${seconds}${secStr}${afterSleepStr}`;
 }
 
 // Tooltip logic
@@ -172,22 +191,31 @@ function showTooltip(e, text) {
   if (!tooltip) return;
   
   tooltip.textContent = text;
-  tooltip.classList.add('visible');
+  
+  // Reset styles to get accurate measurements
+  tooltip.style.display = 'block';
+  tooltip.style.visibility = 'hidden';
+  tooltip.classList.remove('visible');
   
   const rect = e.currentTarget.getBoundingClientRect();
-  const tooltipRect = tooltip.getBoundingClientRect();
+  const tooltipWidth = tooltip.offsetWidth;
+  const tooltipHeight = tooltip.offsetHeight;
   
   // Position above the button, centered
-  let top = rect.top - tooltipRect.height - 8;
-  let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+  let top = rect.top - tooltipHeight - 8;
+  let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
   
   // Boundary checks
   if (top < 0) top = rect.bottom + 8;
-  if (left < 0) left = 8;
-  if (left + tooltipRect.width > window.innerWidth) left = window.innerWidth - tooltipRect.width - 8;
+  if (left < 4) left = 4;
+  if (left + tooltipWidth > window.innerWidth - 4) {
+    left = window.innerWidth - tooltipWidth - 4;
+  }
   
   tooltip.style.top = `${top}px`;
   tooltip.style.left = `${left}px`;
+  tooltip.style.visibility = 'visible';
+  tooltip.classList.add('visible');
 }
 
 function hideTooltip() {
@@ -322,23 +350,7 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
   const actions = document.createElement('div');
   actions.className = 'tab-actions';
 
-  if (isNapped) {
-    const wakeBtn = document.createElement('button');
-    wakeBtn.className = 'action-btn wake-btn';
-    wakeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
-    const wakeTitle = chrome.i18n.getMessage('wakeUpSingleTab') || 'Wake Up';
-    wakeBtn.onmouseenter = (e) => showTooltip(e, wakeTitle);
-    wakeBtn.onmouseleave = hideTooltip;
-    wakeBtn.onclick = async (e) => {
-      e.stopPropagation();
-      hideTooltip();
-      await safeUpdate(async () => {
-        chrome.runtime.sendMessage({ action: 'wakeUpSingleTab', tabId: tab.id });
-        setTimeout(updatePopup, 100);
-      });
-    };
-    actions.appendChild(wakeBtn);
-  } else if (!isCurrentViewing) {
+  if (!isNapped) {
     const napBtn = document.createElement('button');
     napBtn.className = 'action-btn nap-btn';
     napBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
@@ -359,7 +371,7 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
   const wlBtn = document.createElement('button');
   wlBtn.className = `whitelist-btn ${isWhitelisted ? 'active' : ''}`;
   wlBtn.innerHTML = isWhitelisted 
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>'
     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path></svg>';
   
   const wlTitle = isWhitelisted 
@@ -377,6 +389,21 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
     });
   };
   actions.appendChild(wlBtn);
+
+  // Add close button
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'action-btn close-btn';
+  closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  const closeTitle = chrome.i18n.getMessage('closeTab') || 'Close Tab';
+  closeBtn.onmouseenter = (e) => showTooltip(e, closeTitle);
+  closeBtn.onmouseleave = hideTooltip;
+  closeBtn.onclick = async (e) => {
+    e.stopPropagation();
+    hideTooltip();
+    await chrome.tabs.remove(tab.id);
+    updatePopup();
+  };
+  actions.appendChild(closeBtn);
 
   meta.appendChild(timeSpan);
   info.appendChild(title);
@@ -397,16 +424,48 @@ function updateTimeSpan(timeSpan, settings, now, timeoutMs, enableAutoSleep) {
   const isCurrentViewing = timeSpan.dataset.isCurrentViewing === 'true';
   const isWhitelisted = timeSpan.dataset.isWhitelisted === 'true';
   const tabId = parseInt(timeSpan.dataset.tabId);
+  const tabItem = timeSpan.closest('.tab-item');
   
   timeSpan.classList.remove('napped', 'active', 'countdown');
   timeSpan.style.color = '';
   timeSpan.textContent = '';
+  if (tabItem) tabItem.classList.remove('has-timer');
+
+  const autoCloseTimeoutMs = (settings.autoCloseTimeout || 0) * 60 * 1000;
+  const enableAutoClose = settings.enableAutoClose ?? (settings.autoCloseTimeout > 0);
 
   if (isNapped) {
     timeSpan.classList.add('napped');
     const nappedAt = settings.nappedTabsData[tabId]?.nappedAt;
+    
+    let timeText = '';
     if (nappedAt) {
-      timeSpan.textContent = formatTime(now - nappedAt);
+      timeText = formatTime(now - nappedAt);
+    }
+
+    // Add close countdown if enabled
+    if (enableAutoClose && autoCloseTimeoutMs > 0) {
+      const awakenedAt = settings.awakenedTabsData[tabId]?.awakenedAt || 0;
+      const lastActive = Math.max(parseFloat(timeSpan.dataset.lastAccessed) || 0, awakenedAt);
+      const remainingClose = autoCloseTimeoutMs - (now - lastActive);
+      
+      if (remainingClose > 0) {
+        const closeStr = chrome.i18n.getMessage('autoCloseIn') || '后关闭';
+        const closeTime = formatTime(remainingClose);
+        const nappedForStr = chrome.i18n.getMessage('nappedFor') || '已休眠';
+        if (timeText) {
+          timeSpan.textContent = `${nappedForStr} ${timeText} (${closeTime}${closeStr})`;
+        } else {
+          timeSpan.textContent = `${closeTime}${closeStr}`;
+        }
+        if (tabItem) tabItem.classList.add('has-timer');
+      } else {
+        timeSpan.textContent = timeText;
+        if (timeText && tabItem) tabItem.classList.add('has-timer');
+      }
+    } else {
+      timeSpan.textContent = timeText;
+      if (timeText && tabItem) tabItem.classList.add('has-timer');
     }
   } else if (isCurrentViewing) {
     timeSpan.classList.add('active');
@@ -422,8 +481,9 @@ function updateTimeSpan(timeSpan, settings, now, timeoutMs, enableAutoSleep) {
     const remaining = timeoutMs - (now - lastActive);
     
     if (remaining > 0) {
-      timeSpan.textContent = formatTime(remaining);
+      timeSpan.textContent = formatTime(remaining, true);
       timeSpan.classList.add('countdown');
+      if (tabItem) tabItem.classList.add('has-timer');
     }
   }
 }
@@ -449,9 +509,11 @@ async function updateTimersOnly() {
   await safeUpdate(async () => {
     const settings = await chrome.storage.local.get({ 
       timeout: DEFAULT_TIMEOUT,
+      autoCloseTimeout: DEFAULT_AUTO_CLOSE_TIMEOUT,
       nappedTabsData: {},
       awakenedTabsData: {},
-      enableAutoSleep: null
+      enableAutoSleep: null,
+      enableAutoClose: null
     });
     const timeoutMs = settings.timeout * 60 * 1000;
     const now = Date.now();
@@ -474,10 +536,12 @@ async function updatePopup() {
   await safeUpdate(async () => {
     const settings = await chrome.storage.local.get({
       timeout: DEFAULT_TIMEOUT,
+      autoCloseTimeout: DEFAULT_AUTO_CLOSE_TIMEOUT,
       nappedTabsData: {},
       awakenedTabsData: {},
       whitelist: DEFAULT_WHITELIST,
-      enableAutoSleep: null
+      enableAutoSleep: null,
+      enableAutoClose: null
     });
     
     const timeoutMs = settings.timeout * 60 * 1000;
@@ -532,7 +596,6 @@ async function updatePopup() {
       if (switcher) switcher.classList.add('hidden');
       
       activeTabSection.classList.add('hidden');
-      document.getElementById('wake-up-all').style.display = 'none';
 
       displayTabs = allTabs.filter(t => {
         const title = (t.title || '').toLowerCase();
@@ -571,28 +634,12 @@ async function updatePopup() {
         }
         tabListContainer.appendChild(fragment);
     }
-
-    // 控制“立即激活所有”按钮的显示
-    const wakeUpAllBtn = document.getElementById('wake-up-all');
-    if (!searchTerm && currentTabType === 'napped' && nappedTabs.length > 0) {
-      wakeUpAllBtn.style.display = 'block';
-    } else {
-      wakeUpAllBtn.style.display = 'none';
-    }
     postPopupSize();
   });
 }
 
-document.getElementById('wake-up-all').addEventListener('click', async () => {
-  await safeUpdate(async () => {
-    chrome.runtime.sendMessage({ action: 'wakeUpAll' });
-    setTimeout(updatePopup, 500);
-  });
-});
-
 document.getElementById('open-settings').addEventListener('click', showSettingsView);
 document.getElementById('back-to-main').addEventListener('click', showMainView);
-document.getElementById('save-settings').addEventListener('click', saveOptions);
 document.getElementById('close-popup').addEventListener('click', () => {
     if (window.parent !== window) {
       window.parent.postMessage('closeTabNapPanel', '*');
@@ -629,6 +676,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     translatePage();
     updatePopup();
   });
+
+  // 监听标签页和分组的变化，实时更新界面
+  const debouncedUpdate = debounce(updatePopup, 300);
+  chrome.tabs.onUpdated.addListener(debouncedUpdate);
+  chrome.tabs.onRemoved.addListener(debouncedUpdate);
+  chrome.tabs.onActivated.addListener(debouncedUpdate);
+  chrome.tabGroups.onUpdated.addListener(debouncedUpdate);
+  chrome.tabGroups.onRemoved.addListener(debouncedUpdate);
+  chrome.tabs.onDetached.addListener(debouncedUpdate);
+  chrome.tabs.onAttached.addListener(debouncedUpdate);
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && (changes.nappedTabsData || changes.awakenedTabsData || changes.whitelist)) {
+      debouncedUpdate();
+    }
+  });
+  
   // 每秒更新一次计时器，而不是重建整个列表
   updateInterval = setInterval(updateTimersOnly, 1000);
 });

@@ -1,6 +1,6 @@
 // 默认配置
 const DEFAULT_TIMEOUT = 10; // 10 分钟
-const DEFAULT_AUTO_CLOSE_TIMEOUT = 0; // 默认不自动关闭
+const DEFAULT_AUTO_CLOSE_TIMEOUT = 300; // 默认 300 分钟后自动关闭
 const DEFAULT_KEEP_ACTIVE = 5; // 默认保留最近活跃的 5 个标签页不休眠
 const BASE_NAP_TITLE = chrome.i18n.getMessage('napGroupTitle') || "😴 Nap";
 const CHECK_INTERVAL = 0.16; // 每 10 秒左右检查一次 (6/60 = 0.1)
@@ -82,7 +82,7 @@ async function initialize() {
   const result = await chrome.storage.local.get(['timeout', 'autoCloseTimeout', 'excludeAudio', 'whitelist', 'activeTabsToKeep']);
   const defaults = {};
   if (result.timeout === undefined) defaults.timeout = DEFAULT_TIMEOUT;
-  if (result.autoCloseTimeout === undefined) defaults.autoCloseTimeout = DEFAULT_AUTO_CLOSE_TIMEOUT;
+  if (result.autoCloseTimeout === undefined || result.autoCloseTimeout === 0) defaults.autoCloseTimeout = DEFAULT_AUTO_CLOSE_TIMEOUT;
   if (result.excludeAudio === undefined) defaults.excludeAudio = true;
   if (result.whitelist === undefined) defaults.whitelist = '';
   if (result.activeTabsToKeep === undefined) defaults.activeTabsToKeep = DEFAULT_KEEP_ACTIVE;
@@ -243,6 +243,7 @@ async function ungroupIfNapped(tabId) {
         nappedTabsData: data.nappedTabsData,
         awakenedTabsData: data.awakenedTabsData 
       });
+      // 这里的 storage 变化会触发 popup 的 updatePopup
     }
 
     const tab = await chrome.tabs.get(tabId);
@@ -579,7 +580,7 @@ async function checkAndNapTabs(force = false) {
               const currentTab = await chrome.tabs.get(tab.id);
               if (!currentTab.active && !currentTab.discarded) {
                 // 在精确倒计时结束时，也要先检查一次是否应该直接关闭
-                const settingsNow = await chrome.storage.local.get({ autoCloseTimeout: 0, enableAutoClose: null });
+                const settingsNow = await chrome.storage.local.get({ autoCloseTimeout: DEFAULT_AUTO_CLOSE_TIMEOUT, enableAutoClose: null });
                 const currentNow = Date.now();
                 const currentAwakenedAt = (await chrome.storage.local.get({ awakenedTabsData: {} })).awakenedTabsData[tab.id]?.awakenedAt || 0;
                 const currentLastActive = Math.max(currentTab.lastAccessed || 0, currentAwakenedAt);

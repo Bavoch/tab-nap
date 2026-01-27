@@ -39,7 +39,7 @@
     "message": "Keep Recently Opened Tabs (count)"
   },
   "timeoutHelp": {
-    "message": "Tabs idle for N minutes will sleep and be archived under the Nap group; enter 0 to disable."
+    "message": "Tabs idle for N minutes will sleep and be archived under the Nap group."
   },
   "autoCloseHelp": {
     "message": "Tabs idle for N minutes will be closed automatically."
@@ -97,6 +97,15 @@
   },
   "seconds": {
     "message": "s"
+  },
+  "closeTab": {
+    "message": "Close Tab"
+  },
+  "autoCloseIn": {
+    "message": " to close"
+  },
+  "afterSleep": {
+    "message": " to nap"
   },
   "tabListTitle": {
     "message": "Tab Status"
