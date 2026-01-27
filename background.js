@@ -3,8 +3,8 @@ const DEFAULT_TIMEOUT = 10; // 10 分钟
 const DEFAULT_AUTO_CLOSE_TIMEOUT = 300; // 默认 300 分钟后自动关闭
 const DEFAULT_KEEP_ACTIVE = 5; // 默认保留最近活跃的 5 个标签页不休眠
 const BASE_NAP_TITLE = chrome.i18n.getMessage('napGroupTitle') || "😴 Nap";
-const CHECK_INTERVAL = 0.16; // 每 10 秒左右检查一次 (6/60 = 0.1)
-const WARNING_TEXT = chrome.i18n.getMessage('warningText') || "即将休眠...";
+const CHECK_INTERVAL = 0.1; // 每 6 秒左右检查一次 (6/60 = 0.1)
+const WARNING_TEXT = chrome.i18n.getMessage('warningText') || "Napping soon...";
 const WARNING_THRESHOLD = 10 * 1000; // 10 秒
 
 // 记录原始标题，用于恢复

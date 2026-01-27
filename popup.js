@@ -177,7 +177,7 @@ function formatTime(ms, isCountdown = false) {
   
   const minStr = chrome.i18n.getMessage('minutes') || 'm';
   const secStr = chrome.i18n.getMessage('seconds') || 's';
-  const afterSleepStr = isCountdown ? (chrome.i18n.getMessage('afterSleep') || '后休眠') : '';
+  const afterSleepStr = isCountdown ? (chrome.i18n.getMessage('afterSleep') || ' to nap') : '';
   
   if (minutes >= 1) {
     return `${minutes}${minStr}${afterSleepStr}`;
@@ -333,6 +333,23 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
   title.className = 'tab-title';
   title.textContent = tab.title;
   title.title = tab.title;
+
+  // 悬停时修改标题文字的逻辑
+  if (isCurrentViewing || isWhitelisted) {
+    const originalTitle = tab.title;
+    const hoverText = isCurrentViewing 
+      ? (chrome.i18n.getMessage('currentTabHover') || 'Current Tab')
+      : (chrome.i18n.getMessage('whitelistedTabHover') || 'Whitelisted Tab');
+    
+    tabItem.addEventListener('mouseenter', () => {
+      title.textContent = hoverText;
+      title.classList.add('hover-info');
+    });
+    tabItem.addEventListener('mouseleave', () => {
+      title.textContent = originalTitle;
+      title.classList.remove('hover-info');
+    });
+  }
   
   const meta = document.createElement('div');
   meta.className = 'tab-meta';
@@ -450,9 +467,9 @@ function updateTimeSpan(timeSpan, settings, now, timeoutMs, enableAutoSleep) {
       const remainingClose = autoCloseTimeoutMs - (now - lastActive);
       
       if (remainingClose > 0) {
-        const closeStr = chrome.i18n.getMessage('autoCloseIn') || '后关闭';
+        const closeStr = chrome.i18n.getMessage('autoCloseIn') || ' to close';
         const closeTime = formatTime(remainingClose);
-        const nappedForStr = chrome.i18n.getMessage('nappedFor') || '已休眠';
+        const nappedForStr = chrome.i18n.getMessage('nappedFor') || 'Napped';
         if (timeText) {
           timeSpan.textContent = `${nappedForStr} ${timeText} (${closeTime}${closeStr})`;
         } else {

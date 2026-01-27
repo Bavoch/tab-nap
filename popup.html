@@ -222,6 +222,11 @@
       transition: opacity 0.2s;
     }
 
+    .tab-title.hover-info {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
     .tab-item.has-timer:hover .tab-title {
       opacity: 0;
     }
@@ -304,7 +309,7 @@
     .search-input {
       width: 100%;
       padding: 8px 12px 8px 32px;
-      background: var(--bg-secondary);
+      background: rgba(0, 0, 0, 0.08);
       border: 1px solid var(--border-color);
       border-radius: 20px;
       box-sizing: border-box;
@@ -388,12 +393,6 @@
       background: var(--border-color);
     }
 
-    .whitelist-btn.active {
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      border: 1px solid var(--border-color);
-    }
-
     .actions {
       display: flex;
       flex-direction: column;
@@ -472,9 +471,23 @@
     }
 
     .field-content {
+      position: relative;
       display: flex;
-      flex-direction: column;
-      gap: 8px;
+      align-items: center;
+    }
+
+    .field-content input[type="number"] {
+      flex: 1;
+      padding-right: 48px;
+    }
+
+    .input-unit {
+      position: absolute;
+      right: 12px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      pointer-events: none;
+      opacity: 0.7;
     }
 
     /* Switch */
@@ -495,7 +508,7 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: var(--bg-tertiary);
+      background: rgba(0, 0, 0, 0.04);
       border: 1px solid var(--border-color);
       border-radius: 999px;
       transition: all 0.2s;
@@ -548,7 +561,7 @@
     textarea {
       width: 100%;
       padding: 8px 12px;
-      background: var(--bg-primary);
+      background: rgba(0, 0, 0, 0.04);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-md);
       box-sizing: border-box;
@@ -564,9 +577,27 @@
       border-color: var(--text-secondary);
     }
     
+    .field-description {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      opacity: 0.7;
+      margin-top: 2px;
+    }
+
     textarea {
+      width: 100%;
       height: 80px;
-      resize: vertical;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.04);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.8rem;
+      resize: none;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
     
     #status {
@@ -648,9 +679,9 @@
     </div>
 
     <div class="tab-switcher">
-      <div id="tab-napped" class="tab-btn active">已休眠</div>
-      <div id="tab-active" class="tab-btn">正在运行</div>
-    </div>
+        <div id="tab-napped" class="tab-btn active" data-i18n="tabNapped">Napped</div>
+        <div id="tab-active" class="tab-btn" data-i18n="tabActive">Running</div>
+      </div>
 
     <div id="tab-list" class="tab-list">
       <!-- Tab items will be injected here -->
@@ -664,78 +695,86 @@
       <button id="back-to-main" class="back-btn" data-i18n-title="back">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
       </button>
-      <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;" data-i18n="optionsTitle">TabNap 设置</h3>
+      <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;" data-i18n="optionsTitle">TabNap Settings</h3>
     </div>
 
     <div class="settings-view-content">
       <div class="field">
         <div class="field-header">
           <label for="enableAutoSleep">
-            <span data-i18n="timeoutLabel">自动休眠 (分钟)</span>
+            <span data-i18n="timeoutLabel">Auto Nap</span>
             <button class="info-icon" type="button" data-i18n-title="timeoutHelp">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="10" x2="12" y2="16"></line><circle cx="12" cy="7" r="1"></circle></svg>
             </button>
           </label>
-          <label class="switch" aria-label="启用自动休眠">
+          <label class="switch" aria-label="Enable auto sleep">
             <input type="checkbox" id="enableAutoSleep">
             <span class="slider"></span>
           </label>
         </div>
         <div id="timeout-content" class="field-content">
           <input type="number" id="timeout" min="1" max="1440" value="10">
+          <span class="input-unit" data-i18n="minutes">mins</span>
         </div>
       </div>
 
       <div class="field">
         <div class="field-header">
           <label for="enableAutoClose">
-            <span data-i18n="autoCloseTimeoutLabel">自动关闭 (分钟)</span>
+            <span data-i18n="autoCloseTimeoutLabel">Auto Close</span>
             <button class="info-icon" type="button" data-i18n-title="autoCloseHelp">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="10" x2="12" y2="16"></line><circle cx="12" cy="7" r="1"></circle></svg>
             </button>
           </label>
-          <label class="switch" aria-label="启用自动关闭">
+          <label class="switch" aria-label="Enable auto close">
             <input type="checkbox" id="enableAutoClose">
             <span class="slider"></span>
           </label>
         </div>
         <div id="autoClose-content" class="field-content">
           <input type="number" id="autoCloseTimeout" min="1" max="1440" value="300">
+          <span class="input-unit" data-i18n="minutes">mins</span>
         </div>
       </div>
 
       <div class="field">
         <div class="field-header">
           <label for="enableKeepActive">
-            <span data-i18n="keepActiveLabel">保持最近打开的标签页 (个)</span>
+            <span data-i18n="keepActiveLabel">Protected Tabs</span>
             <button class="info-icon" type="button" data-i18n-title="keepActiveHelp">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="10" x2="12" y2="16"></line><circle cx="12" cy="7" r="1"></circle></svg>
             </button>
           </label>
-          <label class="switch" aria-label="启用保持最近打开的标签页">
+          <label class="switch" aria-label="Enable keep recent tabs">
             <input type="checkbox" id="enableKeepActive">
             <span class="slider"></span>
           </label>
         </div>
         <div id="keepActive-content" class="field-content">
           <input type="number" id="activeTabsToKeep" min="1" max="100" value="5">
+          <span class="input-unit" style="padding-right: 0;">tabs</span>
         </div>
       </div>
 
       <div class="field">
         <div class="field-header">
-          <label for="excludeAudio" data-i18n="excludeAudioLabel">保持正在播放声音的标签页</label>
-          <label class="switch" aria-label="启用保持播放音频的标签页">
+          <label for="excludeAudio" data-i18n="excludeAudioLabel">Keep Tabs Playing Audio</label>
+          <label class="switch" aria-label="Enable keep audio tabs">
             <input type="checkbox" id="excludeAudio">
             <span class="slider"></span>
           </label>
         </div>
       </div>
 
-      <div class="field" style="background: transparent; border: none; padding: 0; margin-top: 8px;">
-        <label for="whitelist" data-i18n="whitelistLabel" style="margin-bottom: 8px; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">白名单 (每行一个关键词或域名):</label>
-        <textarea id="whitelist" data-i18n-placeholder="whitelistPlaceholder"
-          placeholder="例如: youtube.com&#10;gmail.com&#10;music"></textarea>
+      <div class="field">
+        <div class="field-header" style="flex-direction: column; align-items: flex-start;">
+          <label for="whitelist" data-i18n="whitelistLabel">Whitelist</label>
+          <div class="field-description" data-i18n="whitelistDescription">One keyword or domain per line</div>
+        </div>
+        <div class="field-content" style="margin-top: 10px;">
+          <textarea id="whitelist" data-i18n-placeholder="whitelistPlaceholder"
+            placeholder="e.g.: youtube.com&#10;gmail.com&#10;music"></textarea>
+        </div>
       </div>
       <div id="status"></div>
     </div>

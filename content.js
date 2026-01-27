@@ -1,4 +1,3 @@
-import './content.css';
 
 (function() {
   if (window.tabNapInitialized) return;

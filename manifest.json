@@ -3,7 +3,7 @@
   "name": "__MSG_extensionName__",
   "version": "1.0.1",
   "description": "__MSG_extensionDescription__",
-  "default_locale": "zh_CN",
+  "default_locale": "en",
   "permissions": [
     "tabs",
     "storage",
@@ -21,7 +21,8 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "css": ["content.css"]
     }
   ],
   "web_accessible_resources": [

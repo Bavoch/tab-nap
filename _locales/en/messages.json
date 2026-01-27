@@ -3,7 +3,7 @@
     "message": "TabNap"
   },
   "extensionDescription": {
-    "message": "Automatically sleep inactive tabs and archive them to the far left."
+    "message": "Automatically nap inactive tabs and archive them to the far left."
   },
   "popupTitle": {
     "message": "TabNap"
@@ -30,28 +30,31 @@
     "message": "TabNap Settings"
   },
   "timeoutLabel": {
-    "message": "Auto Sleep (minutes)"
+    "message": "Auto Nap"
   },
   "autoCloseTimeoutLabel": {
-    "message": "Auto Close (minutes)"
+    "message": "Auto Close"
   },
   "keepActiveLabel": {
-    "message": "Keep Recently Opened Tabs (count)"
+    "message": "Protected Tabs"
   },
   "timeoutHelp": {
-    "message": "Tabs idle for N minutes will sleep and be archived under the Nap group."
+    "message": "Tabs idle for N minutes will nap and be archived under the Nap group."
   },
   "autoCloseHelp": {
     "message": "Tabs idle for N minutes will be closed automatically."
   },
   "keepActiveHelp": {
-    "message": "The most recent N tabs stay active and will not sleep or close."
+    "message": "The most recent N tabs stay running and will not nap or close."
   },
   "excludeAudioLabel": {
     "message": "Keep Tabs Playing Audio"
   },
   "whitelistLabel": {
-    "message": "Whitelist (one keyword/domain per line):"
+    "message": "Whitelist"
+  },
+  "whitelistDescription": {
+    "message": "One keyword or domain per line"
   },
   "whitelistPlaceholder": {
     "message": "e.g.: youtube.com\ngmail.com\nmusic"
@@ -114,7 +117,7 @@
     "message": "Running"
   },
   "tabNapped": {
-    "message": "Hibernated"
+    "message": "Napped"
   },
   "back": {
     "message": "Back"
@@ -124,5 +127,11 @@
   },
   "pinnedStatus": {
     "message": "Pinned"
+  },
+  "currentTabHover": {
+    "message": "Current Tab"
+  },
+  "whitelistedTabHover": {
+    "message": "Whitelisted Tab"
   }
 }
