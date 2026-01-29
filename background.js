@@ -380,7 +380,11 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
  */
 async function resetAllTimers() {
   try {
-    const tabs = await chrome.tabs.query({ discarded: false });
+    // 获取当前活跃窗口
+    const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+    if (!lastFocusedWindow) return;
+
+    const tabs = await chrome.tabs.query({ discarded: false, windowId: lastFocusedWindow.id });
     const data = await chrome.storage.local.get({ awakenedTabsData: {} });
     const now = Date.now();
     
@@ -441,8 +445,12 @@ async function wakeUpByWhitelist() {
 
     if (whitelist.length === 0) return;
 
-    // 获取所有丢弃的标签页
-    const tabs = await chrome.tabs.query({ discarded: true });
+    // 获取当前活跃窗口
+    const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+    if (!lastFocusedWindow) return;
+
+    // 获取当前窗口所有丢弃的标签页
+    const tabs = await chrome.tabs.query({ discarded: true, windowId: lastFocusedWindow.id });
     for (const tab of tabs) {
       const isWhitelisted = whitelist.some(pattern => {
         return (tab.url && tab.url.includes(pattern)) || (tab.title && tab.title.includes(pattern));
@@ -462,7 +470,11 @@ async function wakeUpByWhitelist() {
  */
 async function wakeUpAllTabs() {
   try {
-    const tabs = await chrome.tabs.query({ discarded: true });
+    // 获取当前活跃窗口
+    const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+    if (!lastFocusedWindow) return;
+
+    const tabs = await chrome.tabs.query({ discarded: true, windowId: lastFocusedWindow.id });
     for (const tab of tabs) {
       await ungroupIfNapped(tab.id);
     }
@@ -499,6 +511,10 @@ async function checkAndNapTabs(force = false) {
   const enableAutoClose = settings.enableAutoClose ?? (settings.autoCloseTimeout > 0);
   const enableKeepActive = settings.enableKeepActive ?? (settings.activeTabsToKeep > 0);
 
+  // 获取当前活跃窗口
+  const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+  const currentWindowId = lastFocusedWindow ? lastFocusedWindow.id : null;
+
   // 获取所有非活动、非固定标签页
   let tabs = await chrome.tabs.query({ 
     active: false, 
@@ -525,6 +541,17 @@ async function checkAndNapTabs(force = false) {
   }
 
   for (const tab of tabs) {
+    // 如果插件设置为仅管理当前窗口，则跳过非当前窗口的标签页
+    // 并且确保清除这些标签页可能存在的预警状态
+    if (tab.windowId !== currentWindowId) {
+      if (tabNapTimeouts.has(tab.id)) {
+        clearTimeout(tabNapTimeouts.get(tab.id));
+        tabNapTimeouts.delete(tab.id);
+      }
+      await restoreTabTitle(tab.id);
+      continue;
+    }
+
     // 再次检查是否为固定标签页（双重保险）
     if (tab.pinned) {
       continue;

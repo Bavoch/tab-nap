@@ -566,10 +566,8 @@ async function updatePopup() {
 
     const whitelist = settings.whitelist.split('\n').map(s => s.trim()).filter(s => s.length > 0);
     
-    const [allTabs, currentWindow] = await Promise.all([
-      chrome.tabs.query({}),
-      chrome.windows.getCurrent()
-    ]);
+    const currentWindow = await chrome.windows.getCurrent();
+    const allTabs = await chrome.tabs.query({ windowId: currentWindow.id });
     
     const tabListContainer = document.getElementById('tab-list');
     const activeTabContainer = document.getElementById('active-tab-container');
