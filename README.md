@@ -1,52 +1,77 @@
 # TabNap 😴
 
-TabNap 是一款智能的 Chrome 浏览器扩展，旨在通过自动休眠长时间未使用的标签页来节省系统资源，并保持浏览器界面的整洁。
+**Automatically clean and organize messy tabs with Chrome native Tab Groups.**
 
-## 主要功能 ✨
+TabNap is a powerful yet lightweight Chrome extension designed to declutter your browsing experience. It intelligently puts inactive tabs to "sleep" to save memory and organizes them using native Chrome Tab Groups, keeping your browser fast and your mind focused.
 
-- **自动休眠**: 自动识别并休眠长时间不活跃的标签页。
-- **智能归档**: 休眠后的标签页会被自动移动到浏览器最左侧，并放入专门的“休眠 (Nap)”分组中。
-- **自动恢复**: 点击休眠分组中的标签页时，它会自动移出分组并重新加载，恢复到活动状态。
-- **自定义配置**:
-    - 自定义休眠等待时间。
-    - **音频保护**: 可选不休眠正在播放音频的标签页。
-    - **白名单**: 支持通过域名或关键字设置白名单，防止特定网站被休眠。
-- **手动触发**: 通过扩展图标弹出菜单，可以一键立即休眠所有非活跃标签。
-- **可视化提醒**: 在标签页即将休眠的前 10 秒，标签页标题会显示“即将休眠...”的提醒。
-- **内存释放**: 通过 Chrome 的 `discard` 机制释放休眠标签页占用的内存，同时保留其在标签栏中的位置。
+---
 
-## 安装方法 🛠️
+## Key Features ✨
 
-1. 下载本项目代码到本地。
-2. 打开 Chrome 浏览器，进入 `chrome://extensions/` 页面。
-3. 开启页面右上角的“开发者模式”。
-4. 点击“加载已解压的扩展程序”，选择本项目所在的文件夹。
+- **🚀 Auto-Nap (Discarding):** Automatically put idle tabs to sleep after a customizable period to free up system memory.
+- **📁 Smart Grouping:** Automatically moves sleeping tabs into a dedicated, collapsed "Nap" group to keep your tab bar tidy.
+- **⏰ Live Countdowns:** See exactly how much time is left before a tab naps or closes directly in the popup.
+- **🛡️ Intelligent Protection:**
+  - **Audio Protection:** Never sleep tabs that are currently playing music or video.
+  - **Pinned Tabs:** Your pinned tabs are always safe and never touched.
+  - **Active Tabs Protection:** Keep a specific number of your most recently used tabs active.
+- **📝 Flexible Whitelist:** Easily exclude specific domains or keywords from being napped or closed.
+- **♻️ Auto-Close:** Optionally close tabs that have been inactive for an extended period.
+- **🎨 Native Integration:** Built on top of Chrome's native Tab Groups for a seamless and stable experience.
 
-## 使用说明 📖
+---
 
-- **设置**: 点击扩展图标，选择“打开设置”来调整休眠时间、音频保护和白名单。
-- **休眠**: 当标签页闲置时间超过设定值时，它会自动进入“Nap”分组。
-- **唤醒**: 只需点击“Nap”分组中的任何标签页，它就会自动回到原来的位置（或紧随活动标签页）并刷新加载。
+## How it Works 🛠️
 
-## 技术实现 💻
+TabNap uses the official Chrome `discard` API, which suspends tabs without removing them from your tab bar. This means you get the memory savings of closing a tab, but it stays right where it is, ready to be "woken up" with a single click.
 
-- **Manifest V3**: 使用最新的 Chrome 扩展规范。
-- **Service Worker**: 高效的后台处理机制。
-- **i18n**: 完整的多语言支持（目前支持中文和英文）。
-- **Scripting API**: 用于动态修改标签页标题和注入控制逻辑。
+Combined with **Chrome Tab Groups**, TabNap transforms a messy row of 50+ tabs into a clean, organized workspace.
 
-## 项目结构 📂
+---
 
-- `background.js`: 核心逻辑，处理休眠定时器、分组管理和标签状态。
-- `popup.html/js`: 扩展弹出窗口，用于快速查看状态和手动操作。
-- `options.html/js`: 设置页面。
-- `_locales/`: 多语言资源文件。
-- `manifest.json`: 扩展配置文件。
+## Installation 📦
 
-## 贡献 🤝
+1. Download or clone this repository.
+2. Open Chrome and navigate to `chrome://extensions/`.
+3. Enable **Developer Mode** (toggle in the top right).
+4. Click **Load unpacked** and select the folder containing this project.
 
-欢迎提交 Issue 或 Pull Request 来改进 TabNap！
+---
 
-## 许可证 📄
+## Privacy First 🔒
 
-本项目采用 [MIT License](LICENSE) 许可（如有）。
+- **No Data Collection:** TabNap does not track your browsing history or collect any personal data.
+- **Local Processing:** All settings and tab management happen locally on your device.
+- **Open Source:** Transparent code that respects your privacy.
+- [Read our full Privacy Policy here](https://bavoch.github.io/tab-nap/privacy.html).
+
+---
+
+## Screenshots 📸
+
+*(Add your beautiful design screenshots here to showcase the Before/After effect and the Settings panel)*
+
+---
+
+## Project Structure 📂
+
+- `background.js`: Core logic for timers, grouping, and tab management.
+- `popup.html/js`: Fast access to tab status and manual controls.
+- `manifest.json`: Extension configuration (Manifest V3).
+- `_locales/`: Internationalization support (English, Chinese).
+
+---
+
+## Contributing 🤝
+
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/Bavoch/tab-nap/issues).
+
+---
+
+## License 📄
+
+This project is [MIT](LICENSE) licensed.
+
+---
+
+<p align="center">Made with ❤️ for a faster, cleaner browsing experience.</p>
