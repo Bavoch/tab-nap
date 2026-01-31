@@ -49,7 +49,11 @@ Combined with **Chrome Tab Groups**, TabNap transforms a messy row of 50+ tabs i
 
 ## Screenshots 📸
 
-*(Add your beautiful design screenshots here to showcase the Before/After effect and the Settings panel)*
+<p align="center">
+  <img src="public/TabNap-Chrome 1.png" width="800" alt="TabNap Before & After">
+  <br>
+  <img src="public/TabNap-Chrome 2.png" width="800" alt="TabNap Features & Settings">
+</p>
 
 ---
 
