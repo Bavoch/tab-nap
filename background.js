@@ -198,10 +198,10 @@ chrome.action.onClicked.addListener(async (tab) => {
     
     try {
       // 尝试重新注入 content script
-      // 由于移除了静态 content_scripts，我们需要指定文件路径
-      // 注意：在生产环境下，Vite 会处理这里的路径，但在源码中我们引用原始路径
-      const contentJsPath = chrome.runtime.getURL('content.js');
-      const contentCssPath = chrome.runtime.getURL('content.css');
+      // 从 manifest 中获取正确的 content.js 和 content.css 路径（处理 Vite 混淆后的文件名）
+      const manifest = chrome.runtime.getManifest();
+      const contentJsPath = manifest.content_scripts[0].js[0];
+      const contentCssPath = manifest.content_scripts[0].css[0];
       
       if (contentCssPath) {
         await chrome.scripting.insertCSS({

@@ -10,16 +10,23 @@
     "alarms",
     "tabGroups",
     "scripting",
-    "favicon",
-    "activeTab"
+    "favicon"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "popup.js", "content.js", "content.css"],
+      "resources": ["popup.html", "popup.js"],
       "matches": ["<all_urls>"]
     }
   ],
