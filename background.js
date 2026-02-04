@@ -3,7 +3,7 @@ const DEFAULT_TIMEOUT = 10; // 10 分钟
 const DEFAULT_AUTO_CLOSE_TIMEOUT = 300; // 默认 300 分钟后自动关闭
 const DEFAULT_KEEP_ACTIVE = 5; // 默认保留最近活跃的 5 个标签页不休眠
 const BASE_NAP_TITLE = chrome.i18n.getMessage('napGroupTitle') || "😴 Nap";
-const CHECK_INTERVAL = 0.1; // 每 6 秒左右检查一次 (6/60 = 0.1)
+const CHECK_INTERVAL = 1; // 生产环境最小间隔为 1 分钟
 const WARNING_TEXT = chrome.i18n.getMessage('warningText') || "Napping soon...";
 const WARNING_THRESHOLD = 10 * 1000; // 10 秒
 
@@ -198,9 +198,21 @@ chrome.action.onClicked.addListener(async (tab) => {
     
     try {
       // 尝试重新注入 content script
+      // 从 manifest 中获取正确的 content.js 和 content.css 路径（处理 Vite 混淆后的文件名）
+      const manifest = chrome.runtime.getManifest();
+      const contentJsPath = manifest.content_scripts[0].js[0];
+      const contentCssPath = manifest.content_scripts[0].css[0];
+      
+      if (contentCssPath) {
+        await chrome.scripting.insertCSS({
+          target: { tabId: tab.id },
+          files: [contentCssPath]
+        });
+      }
+
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ['content.js']
+        files: [contentJsPath]
       });
       // 注入成功后再次尝试发送消息
       await chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
