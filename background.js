@@ -7,6 +7,14 @@ const CHECK_INTERVAL = 1; // 生产环境最小间隔为 1 分钟
 const WARNING_TEXT = chrome.i18n.getMessage('warningText') || "Napping soon...";
 const WARNING_THRESHOLD = 10 * 1000; // 10 秒
 
+function debugLog(...args) {
+  console.debug('[TabNap:background]', ...args);
+}
+
+function debugWarn(...args) {
+  console.warn('[TabNap:background]', ...args);
+}
+
 // 记录原始标题，用于恢复
 const tabOriginalTitles = new Map();
 // 记录即将休眠的定时器，用于精确控制 10 秒倒计时
@@ -184,8 +192,19 @@ chrome.runtime.onStartup.addListener(initialize);
 // 立即运行初始化（对于扩展重载等情况）
 initialize();
 
+function canInjectIntoTab(tab) {
+  if (!tab?.id || !tab.url) return false;
+  return /^(https?|file):/i.test(tab.url);
+}
+
 // 监听扩展图标点击事件
 chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab?.id) return;
+  if (!canInjectIntoTab(tab)) {
+    console.debug('TabNap panel is not available on this page:', tab.url);
+    return;
+  }
+
   try {
     // 首先尝试发送消息
     await chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
@@ -200,8 +219,13 @@ chrome.action.onClicked.addListener(async (tab) => {
       // 尝试重新注入 content script
       // 从 manifest 中获取正确的 content.js 和 content.css 路径（处理 Vite 混淆后的文件名）
       const manifest = chrome.runtime.getManifest();
-      const contentJsPath = manifest.content_scripts[0].js[0];
-      const contentCssPath = manifest.content_scripts[0].css[0];
+      const contentScript = manifest.content_scripts?.[0];
+      const contentJsPath = contentScript?.js?.[0];
+      const contentCssPath = contentScript?.css?.[0];
+
+      if (!contentJsPath) {
+        throw new Error('No content script is configured in manifest.');
+      }
       
       if (contentCssPath) {
         await chrome.scripting.insertCSS({
@@ -443,6 +467,58 @@ chrome.runtime.onMessage.addListener((request) => {
   } else if (request.action === 'wakeUpByWhitelist') {
     wakeUpByWhitelist();
   }
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action !== 'getPopupTabs') return false;
+
+  (async () => {
+    const senderWindowId = sender.tab?.windowId;
+    debugLog('getPopupTabs requested.', {
+      senderWindowId,
+      senderTabId: sender.tab?.id,
+      senderUrl: sender.tab?.url,
+      hasSenderTab: Boolean(sender.tab)
+    });
+
+    if (typeof senderWindowId === 'number') {
+      const tabs = await chrome.tabs.query({ windowId: senderWindowId });
+      debugLog('Queried tabs by sender window.', {
+        windowId: senderWindowId,
+        tabCount: tabs.length
+      });
+      if (tabs.length > 0) {
+        sendResponse({ tabs, windowId: senderWindowId });
+        return;
+      }
+    }
+
+    const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+    if (lastFocusedWindow?.id) {
+      const tabs = await chrome.tabs.query({ windowId: lastFocusedWindow.id });
+      debugLog('Queried tabs by last focused window.', {
+        windowId: lastFocusedWindow.id,
+        tabCount: tabs.length
+      });
+      if (tabs.length > 0) {
+        sendResponse({ tabs, windowId: lastFocusedWindow.id });
+        return;
+      }
+    }
+
+    const tabs = await chrome.tabs.query({});
+    debugWarn('Falling back to all tabs query.', {
+      tabCount: tabs.length,
+      senderWindowId,
+      lastFocusedWindowId: lastFocusedWindow?.id
+    });
+    sendResponse({ tabs, windowId: senderWindowId || lastFocusedWindow?.id || null });
+  })().catch(error => {
+    console.error('[TabNap:background] Failed to resolve popup tabs:', error);
+    sendResponse({ tabs: [], windowId: sender.tab?.windowId || null, error: error.message });
+  });
+
+  return true;
 });
 
 /**

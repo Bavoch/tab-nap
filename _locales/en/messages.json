@@ -26,6 +26,9 @@
   "openOptions": {
     "message": "Open Options"
   },
+  "reloadAllTabs": {
+    "message": "Refresh All Tabs"
+  },
   "optionsTitle": {
     "message": "TabNap Settings"
   },

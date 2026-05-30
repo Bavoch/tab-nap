@@ -5,6 +5,104 @@ const DEFAULT_WHITELIST = '';
 const DEFAULT_KEEP_ACTIVE = 5;
 let updateInterval;
 let currentTabType = 'napped'; // 'active' or 'napped'
+let lastRenderDebug = null;
+let diagnosticLines = [];
+
+function setDiagnostics(message, data = null) {
+  const timestamp = new Date().toLocaleTimeString();
+  const suffix = data ? ` ${JSON.stringify(data)}` : '';
+  diagnosticLines = [`${timestamp} ${message}${suffix}`, ...diagnosticLines].slice(0, 8);
+
+  const panel = document.getElementById('debug-panel');
+  if (panel) {
+    panel.textContent = diagnosticLines.join('\n');
+  }
+}
+
+window.addEventListener('error', (event) => {
+  setDiagnostics('window.error', {
+    message: event.message,
+    source: event.filename,
+    line: event.lineno,
+    column: event.colno
+  });
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  setDiagnostics('unhandledrejection', {
+    reason: event.reason?.message || String(event.reason)
+  });
+});
+
+function debugLog(...args) {
+  console.debug('[TabNap:popup]', ...args);
+}
+
+function debugWarn(...args) {
+  console.warn('[TabNap:popup]', ...args);
+}
+
+function storageGet(defaults, label = 'storage.local.get') {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`${label} timed out`));
+    }, 1500);
+
+    try {
+      chrome.storage.local.get(defaults, (items) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        resolve(items);
+      });
+    } catch (error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      reject(error);
+    }
+  });
+}
+
+function storageSet(items, label = 'storage.local.set') {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`${label} timed out`));
+    }, 1500);
+
+    try {
+      chrome.storage.local.set(items, () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        resolve();
+      });
+    } catch (error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      reject(error);
+    }
+  });
+}
 
 function translatePage() {
   // Translate text content
@@ -226,7 +324,7 @@ function hideTooltip() {
 }
 
 async function toggleWhitelist(tab, isWhitelisted) {
-  const settings = await chrome.storage.local.get({ whitelist: DEFAULT_WHITELIST });
+  const settings = await storageGet({ whitelist: DEFAULT_WHITELIST }, 'toggleWhitelist.storageGet');
   let whitelist = settings.whitelist.split('\n').map(s => s.trim()).filter(s => s.length > 0);
   
   let domain = '';
@@ -254,7 +352,7 @@ async function toggleWhitelist(tab, isWhitelisted) {
     }
   }
   
-  await chrome.storage.local.set({ whitelist: whitelist.join('\n') });
+  await storageSet({ whitelist: whitelist.join('\n') }, 'toggleWhitelist.storageSet');
   
   if (addedToWhitelist) {
     // 发送消息通知 background 唤醒符合新白名单的标签页
@@ -262,6 +360,35 @@ async function toggleWhitelist(tab, isWhitelisted) {
   }
 
   updatePopup();
+}
+
+async function reloadAllTabs() {
+  const reloadButton = document.getElementById('reload-all-tabs');
+  if (reloadButton?.disabled) return;
+
+  hideTooltip();
+  if (reloadButton) {
+    reloadButton.disabled = true;
+    reloadButton.style.opacity = '0.45';
+    reloadButton.style.cursor = 'default';
+  }
+
+  await safeUpdate(async () => {
+    const tabs = await chrome.tabs.query({});
+    const reloads = tabs
+      .filter(tab => typeof tab.id === 'number')
+      .map(tab => chrome.tabs.reload(tab.id).catch(error => {
+        console.warn(`Failed to reload tab ${tab.id}:`, error);
+      }));
+
+    await Promise.all(reloads);
+  });
+
+  if (reloadButton) {
+    reloadButton.disabled = false;
+    reloadButton.style.opacity = '';
+    reloadButton.style.cursor = '';
+  }
 }
 
 // 获取安全的 Favicon URL
@@ -509,29 +636,34 @@ async function safeUpdate(fn) {
   try {
     // 检查扩展上下文是否有效
     if (!chrome.runtime?.id) {
+      setDiagnostics('safeUpdate skipped: runtime context invalid');
+      debugWarn('Runtime context is invalid, stopping update interval.');
       if (updateInterval) clearInterval(updateInterval);
       return;
     }
     await fn();
   } catch (e) {
     if (e.message.includes('Extension context invalidated')) {
+      setDiagnostics('safeUpdate failed: context invalidated');
+      debugWarn('Runtime context invalidated during safeUpdate.');
       if (updateInterval) clearInterval(updateInterval);
     } else {
-      console.error('Update error:', e);
+      setDiagnostics('safeUpdate failed', { message: e.message });
+      console.error('[TabNap:popup] Update error:', e);
     }
   }
 }
 
 async function updateTimersOnly() {
   await safeUpdate(async () => {
-    const settings = await chrome.storage.local.get({ 
+    const settings = await storageGet({ 
       timeout: DEFAULT_TIMEOUT,
       autoCloseTimeout: DEFAULT_AUTO_CLOSE_TIMEOUT,
       nappedTabsData: {},
       awakenedTabsData: {},
       enableAutoSleep: null,
       enableAutoClose: null
-    });
+    }, 'updateTimersOnly.storageGet');
     const timeoutMs = settings.timeout * 60 * 1000;
     const now = Date.now();
     const enableAutoSleep = settings.enableAutoSleep !== null ? settings.enableAutoSleep : true;
@@ -549,9 +681,126 @@ function postPopupSize() {
   window.parent.postMessage({ type: 'tabNapResize', height }, '*');
 }
 
+function requestTabsFromHost() {
+  if (window.parent === window) return Promise.resolve(null);
+
+  return new Promise(resolve => {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setDiagnostics('requesting tabs through host bridge', { requestId });
+    debugLog('Requesting tabs through host page bridge.', { requestId });
+    const timeoutId = setTimeout(() => {
+      window.removeEventListener('message', handleMessage);
+      setDiagnostics('host bridge timed out', { requestId });
+      debugWarn('Timed out waiting for host page tabs response.', { requestId });
+      resolve(null);
+    }, 1000);
+
+    function handleMessage(event) {
+      if (event.source !== window.parent) return;
+      if (event.data?.type !== 'tabNapTabsResponse') return;
+      if (event.data.requestId !== requestId) return;
+
+      clearTimeout(timeoutId);
+      window.removeEventListener('message', handleMessage);
+      debugLog('Received host page tabs response.', {
+        requestId,
+        tabCount: Array.isArray(event.data.response?.tabs) ? event.data.response.tabs.length : null,
+        windowId: event.data.response?.windowId,
+        error: event.data.response?.error
+      });
+      setDiagnostics('host bridge response', {
+        requestId,
+        tabCount: Array.isArray(event.data.response?.tabs) ? event.data.response.tabs.length : null,
+        windowId: event.data.response?.windowId,
+        error: event.data.response?.error
+      });
+      resolve(event.data.response || null);
+    }
+
+    window.addEventListener('message', handleMessage);
+    window.parent.postMessage({ type: 'tabNapRequestTabs', requestId }, '*');
+  });
+}
+
+async function getPopupWindowTabs() {
+  setDiagnostics('getPopupWindowTabs started', { iframe: window.parent !== window });
+  const response = await requestTabsFromHost()
+    || await chrome.runtime.sendMessage({ action: 'getPopupTabs' }).catch(() => null);
+
+  if (Array.isArray(response?.tabs)) {
+    setDiagnostics('getPopupWindowTabs resolved', {
+      tabCount: response.tabs.length,
+      windowId: response.windowId,
+      error: response.error
+    });
+    debugLog('Resolved popup tabs.', {
+      tabCount: response.tabs.length,
+      windowId: response.windowId,
+      error: response.error
+    });
+    return {
+      tabs: response.tabs,
+      currentWindow: { id: response.windowId }
+    };
+  }
+
+  setDiagnostics('getPopupWindowTabs fallback direct query');
+  debugWarn('Falling back to direct chrome.tabs.query({}).');
+  return {
+    tabs: await chrome.tabs.query({}),
+    currentWindow: { id: null }
+  };
+}
+
+function createEmptyState(message, details = null) {
+  const emptyState = document.createElement('div');
+  emptyState.style.textAlign = 'center';
+  emptyState.style.padding = '20px';
+  emptyState.style.color = 'var(--text-secondary)';
+
+  const title = document.createElement('div');
+  title.textContent = message;
+  emptyState.appendChild(title);
+
+  if (details) {
+    const detail = document.createElement('pre');
+    detail.style.margin = '12px 0 0';
+    detail.style.padding = '10px';
+    detail.style.textAlign = 'left';
+    detail.style.whiteSpace = 'pre-wrap';
+    detail.style.wordBreak = 'break-word';
+    detail.style.borderRadius = '8px';
+    detail.style.background = 'rgba(0, 0, 0, 0.04)';
+    detail.style.color = 'var(--text-secondary)';
+    detail.style.fontSize = '11px';
+    detail.style.lineHeight = '1.45';
+    detail.textContent = details;
+    emptyState.appendChild(detail);
+  }
+
+  return emptyState;
+}
+
+function formatDebugState(state) {
+  if (!state) return '';
+  return [
+    `debug: ${state.phase}`,
+    `total tabs: ${state.totalTabs}`,
+    `running: ${state.runningCount}`,
+    `napped: ${state.nappedCount}`,
+    `pinned: ${state.pinnedCount}`,
+    `windowId: ${state.currentWindowId ?? 'unknown'}`,
+    `search: ${state.searchTerm || '(empty)'}`,
+    `sample: ${state.sampleTitles.join(' | ') || '(none)'}`
+  ].join('\n');
+}
+
 async function updatePopup() {
+  setDiagnostics('updatePopup started', { currentTabType });
+  debugLog('updatePopup started.', { currentTabType });
   await safeUpdate(async () => {
-    const settings = await chrome.storage.local.get({
+    setDiagnostics('storage get started');
+    const settings = await storageGet({
       timeout: DEFAULT_TIMEOUT,
       autoCloseTimeout: DEFAULT_AUTO_CLOSE_TIMEOUT,
       nappedTabsData: {},
@@ -559,15 +808,31 @@ async function updatePopup() {
       whitelist: DEFAULT_WHITELIST,
       enableAutoSleep: null,
       enableAutoClose: null
-    });
+    }, 'updatePopup.storageGet');
+    setDiagnostics('storage get done');
     
     const timeoutMs = settings.timeout * 60 * 1000;
     const enableAutoSleep = settings.enableAutoSleep !== null ? settings.enableAutoSleep : true;
 
     const whitelist = settings.whitelist.split('\n').map(s => s.trim()).filter(s => s.length > 0);
     
-    const currentWindow = await chrome.windows.getCurrent();
-    const allTabs = await chrome.tabs.query({ windowId: currentWindow.id });
+    const { tabs: allTabs, currentWindow } = await getPopupWindowTabs();
+    setDiagnostics('tabs loaded', {
+      total: allTabs.length,
+      currentWindowId: currentWindow.id
+    });
+    debugLog('Tabs loaded for popup render.', {
+      total: allTabs.length,
+      currentWindowId: currentWindow.id,
+      sample: allTabs.slice(0, 5).map(tab => ({
+        id: tab.id,
+        windowId: tab.windowId,
+        active: tab.active,
+        discarded: tab.discarded,
+        pinned: tab.pinned,
+        title: tab.title
+      }))
+    });
     
     const tabListContainer = document.getElementById('tab-list');
     const activeTabContainer = document.getElementById('active-tab-container');
@@ -580,6 +845,27 @@ async function updatePopup() {
     // 预先分类和过滤
     const nappedTabs = allTabs.filter(t => t.discarded && !t.pinned);
     const activeTabs = allTabs.filter(t => !t.discarded && !t.pinned);
+    lastRenderDebug = {
+      phase: 'render',
+      totalTabs: allTabs.length,
+      runningCount: activeTabs.length,
+      nappedCount: nappedTabs.length,
+      pinnedCount: allTabs.filter(t => t.pinned).length,
+      currentWindowId: currentWindow.id,
+      searchTerm,
+      sampleTitles: allTabs.slice(0, 4).map(tab => tab.title || tab.url || `tab-${tab.id}`)
+    };
+    setDiagnostics('tabs classified', {
+      total: allTabs.length,
+      running: activeTabs.length,
+      napped: nappedTabs.length,
+      pinned: allTabs.filter(t => t.pinned).length
+    });
+    debugLog('Tabs classified.', {
+      nappedCount: nappedTabs.length,
+      runningCount: activeTabs.length,
+      pinnedCount: allTabs.filter(t => t.pinned).length
+    });
     
     // 更新标签栏标题和数量
     const nappedLabel = chrome.i18n.getMessage('tabNapped') || 'Hibernated';
@@ -636,12 +922,12 @@ async function updatePopup() {
 
     tabListContainer.innerHTML = '';
     if (displayTabs.length === 0 && searchTerm) {
-        const noResult = document.createElement('div');
-        noResult.style.textAlign = 'center';
-        noResult.style.padding = '20px';
-        noResult.style.color = 'var(--text-secondary)';
-        noResult.textContent = 'No tabs found';
-        tabListContainer.appendChild(noResult);
+        tabListContainer.appendChild(createEmptyState('No tabs found', formatDebugState(lastRenderDebug)));
+    } else if (displayTabs.length === 0) {
+        const emptyMessage = currentTabType === 'active'
+          ? 'No running tabs found'
+          : 'No napped tabs yet';
+        tabListContainer.appendChild(createEmptyState(emptyMessage, formatDebugState(lastRenderDebug)));
     } else {
         const fragment = document.createDocumentFragment();
         for (const tab of displayTabs) {
@@ -654,6 +940,7 @@ async function updatePopup() {
 }
 
 document.getElementById('open-settings').addEventListener('click', showSettingsView);
+document.getElementById('reload-all-tabs').addEventListener('click', reloadAllTabs);
 document.getElementById('back-to-main').addEventListener('click', showMainView);
 document.getElementById('close-popup').addEventListener('click', () => {
     if (window.parent !== window) {
@@ -684,11 +971,17 @@ document.getElementById('tab-napped').addEventListener('click', () => {
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
+  setDiagnostics('DOMContentLoaded');
   if (window.parent !== window) {
     document.body.classList.add('is-iframe');
+    setDiagnostics('running inside iframe');
+  } else {
+    setDiagnostics('running as top-level extension page');
   }
   await safeUpdate(async () => {
+    setDiagnostics('initial safeUpdate entered');
     translatePage();
+    setDiagnostics('translatePage done');
     updatePopup();
   });
 
@@ -709,9 +1002,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // 每秒更新一次计时器，而不是重建整个列表
   updateInterval = setInterval(updateTimersOnly, 1000);
+  setDiagnostics('listeners registered');
 });
 
-// 当窗口关闭时清除定时器
-window.onunload = () => {
+setDiagnostics('popup.js loaded');
+
+function cleanupPopup() {
   if (updateInterval) clearInterval(updateInterval);
-};
+}
+
+// 当窗口关闭时清除定时器。iframe 中 unload 可能被 Permissions Policy 禁止。
+window.addEventListener('pagehide', cleanupPopup);
