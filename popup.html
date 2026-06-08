@@ -166,19 +166,6 @@
       min-height: 0; /* Important for flex child scrolling */
     }
 
-    .debug-panel {
-      margin: 0 0 12px;
-      padding: 8px 10px;
-      border-radius: var(--radius-md);
-      background: rgba(0, 0, 0, 0.04);
-      color: var(--text-secondary);
-      font-size: 11px;
-      line-height: 1.45;
-      white-space: pre-wrap;
-      word-break: break-word;
-      display: none; /* Hidden by default, only show in debug mode */
-    }
-
     .tab-item {
       display: flex;
       align-items: center;
@@ -699,8 +686,6 @@
         <div id="tab-active" class="tab-btn" data-i18n="tabActive">Running</div>
       </div>
 
-    <div id="debug-panel" class="debug-panel">diagnostics: popup HTML loaded; waiting for popup.js</div>
-
     <div id="tab-list" class="tab-list">
       <!-- Tab items will be injected here -->
     </div>
@@ -798,6 +783,6 @@
     </div>
   </div>
 
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

@@ -4,12 +4,11 @@
   "description": "Browser extension to manage tabs",
   "main": "background.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vite build"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
-    "vite": "^6.4.1",
-    "web-ext": "^8.3.0"
+    "vite": "^6.4.1"
   }
 }

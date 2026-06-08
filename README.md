@@ -31,10 +31,19 @@ Combined with **Chrome Tab Groups**, TabNap transforms a messy row of 50+ tabs i
 
 ## Installation 📦
 
-1. Download or clone this repository.
-2. Open Chrome and navigate to `chrome://extensions/`.
-3. Enable **Developer Mode** (toggle in the top right).
-4. Click **Load unpacked** and select the folder containing this project.
+### Development
+
+1. Run `npm install`.
+2. Start the dev server with `npm run dev`.
+3. Open Chrome and navigate to `chrome://extensions/`.
+4. Enable **Developer Mode**.
+5. Click **Load unpacked** and select the `dist/` folder.
+6. Keep the dev server running. Changes will hot reload without manual extension reloads.
+
+### Release build
+
+1. Run `npm run build`.
+2. Load the generated `dist/` folder in Chrome.
 
 ---
 
@@ -63,6 +72,7 @@ Combined with **Chrome Tab Groups**, TabNap transforms a messy row of 50+ tabs i
 - `popup.html/js`: Fast access to tab status and manual controls.
 - `manifest.json`: Extension configuration (Manifest V3).
 - `_locales/`: Internationalization support (English, Chinese).
+- `vite.config.js`: CRXJS dev server and HMR configuration.
 
 ---
 

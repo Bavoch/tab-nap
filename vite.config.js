@@ -7,8 +7,14 @@ export default defineConfig({
     crx({ manifest }),
   ],
   server: {
+    host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    cors: {
+      origin: [
+        /chrome-extension:\/\//,
+      ],
+    },
     hmr: {
       port: 5173,
     },

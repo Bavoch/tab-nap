@@ -20,6 +20,22 @@ const tabOriginalTitles = new Map();
 // 记录即将休眠的定时器，用于精确控制 10 秒倒计时
 const tabNapTimeouts = new Map();
 
+function isNapGroupTitle(title) {
+  return Boolean(title) && (title.startsWith(BASE_NAP_TITLE) || title === 'Nap');
+}
+
+function clearNapTimeout(tabId) {
+  const timeoutId = tabNapTimeouts.get(tabId);
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    tabNapTimeouts.delete(tabId);
+  }
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * 获取第一个非固定标签页的索引
  * @param {number} windowId 窗口 ID
@@ -28,6 +44,28 @@ const tabNapTimeouts = new Map();
 async function getFirstNonPinnedIndex(windowId) {
   const pinnedTabs = await chrome.tabs.query({ windowId: windowId, pinned: true });
   return pinnedTabs.length;
+}
+
+async function activateReplacementTab(tab) {
+  if (!tab.active) return;
+
+  const tabs = await chrome.tabs.query({ windowId: tab.windowId });
+  const candidates = tabs
+    .filter(candidate => candidate.id !== tab.id && !candidate.discarded)
+    .sort((a, b) => Math.abs(a.index - tab.index) - Math.abs(b.index - tab.index));
+
+  const replacement = candidates.find(candidate => !candidate.pinned) || candidates[0];
+  if (replacement) {
+    await chrome.tabs.update(replacement.id, { active: true });
+  } else {
+    await chrome.tabs.create({
+      windowId: tab.windowId,
+      index: tab.index + 1,
+      active: true
+    });
+  }
+
+  await wait(75);
 }
 
 /**
@@ -76,7 +114,7 @@ async function updateAllNapGroups() {
   try {
     const allGroups = await chrome.tabGroups.query({});
     for (const group of allGroups) {
-      if (group.title && (group.title.startsWith(BASE_NAP_TITLE) || group.title === "Nap")) {
+      if (isNapGroupTitle(group.title)) {
         await updateGroupTitle(group.id);
       }
     }
@@ -253,10 +291,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 async function ungroupIfNapped(tabId) {
   try {
     // 清除可能存在的精确休眠定时器
-    if (tabNapTimeouts.has(tabId)) {
-      clearTimeout(tabNapTimeouts.get(tabId));
-      tabNapTimeouts.delete(tabId);
-    }
+    clearNapTimeout(tabId);
 
     // 恢复标题（如果之前被修改过）
     await restoreTabTitle(tabId);
@@ -291,7 +326,7 @@ async function ungroupIfNapped(tabId) {
 
     if (tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
       const group = await chrome.tabGroups.get(tab.groupId);
-      if (group.title && (group.title.startsWith(BASE_NAP_TITLE) || group.title === "Nap")) {
+      if (isNapGroupTitle(group.title)) {
         await chrome.tabs.ungroup(tab.id);
         // 如果上面没有通过 reload 唤醒（可能不是 discarded 只是被分组了），确保更新分组标题
         await updateGroupTitle(group.id);
@@ -330,11 +365,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     // 可能影响休眠分组的位置
     await updateAllNapGroups();
   }
-
-  if (tab.active) {
-    // 即使只是更新（比如从 discarded 恢复），如果是活跃的也应该尝试移出分组
-    await ungroupIfNapped(tabId);
-  }
 });
 
 // 监听窗口焦点变化，处理切换窗口时活跃标签还在休眠分组的情况
@@ -355,10 +385,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 // 监听标签页关闭
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   tabOriginalTitles.delete(tabId);
-  if (tabNapTimeouts.has(tabId)) {
-    clearTimeout(tabNapTimeouts.get(tabId));
-    tabNapTimeouts.delete(tabId);
-  }
+  clearNapTimeout(tabId);
   
   // 清理休眠时间记录和唤醒时间记录
   const data = await chrome.storage.local.get({ nappedTabsData: {}, awakenedTabsData: {} });
@@ -383,7 +410,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
 // 监听分组移动，确保休眠分组始终在最左侧
 chrome.tabGroups.onMoved.addListener(async (group) => {
-  if (group.title && (group.title.startsWith(BASE_NAP_TITLE) || group.title === "Nap")) {
+  if (isNapGroupTitle(group.title)) {
     await updateGroupTitle(group.id);
   }
 });
@@ -426,10 +453,7 @@ async function resetAllTimers() {
     
     for (const tab of tabs) {
       // 1. 清除预警倒计时
-      if (tabNapTimeouts.has(tab.id)) {
-        clearTimeout(tabNapTimeouts.get(tab.id));
-        tabNapTimeouts.delete(tab.id);
-      }
+      clearNapTimeout(tab.id);
       
       // 2. 恢复标题
       await restoreTabTitle(tab.id);
@@ -453,72 +477,81 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 // 监听来自 popup 的消息
-chrome.runtime.onMessage.addListener((request) => {
-  if (request.action === 'napNow') {
-    checkAndNapTabs(true); // 强制立即检查，忽略时间限制（或者根据逻辑决定）
-  } else if (request.action === 'napSingleTab') {
-    chrome.tabs.get(request.tabId, (tab) => {
-      if (tab) napTab(tab);
-    });
-  } else if (request.action === 'wakeUpSingleTab') {
-    ungroupIfNapped(request.tabId);
-  } else if (request.action === 'wakeUpAll') {
-    wakeUpAllTabs();
-  } else if (request.action === 'wakeUpByWhitelist') {
-    wakeUpByWhitelist();
-  }
-});
-
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action !== 'getPopupTabs') return false;
+  switch (request.action) {
+    case 'napNow':
+      checkAndNapTabs(true);
+      return false;
+    case 'napSingleTab':
+      (async () => {
+        try {
+          const tab = await chrome.tabs.get(request.tabId);
+          if (tab) await napTab(tab);
+        } catch (e) {
+          console.error('[TabNap:background] Error napping single tab:', e);
+        }
+        sendResponse({});
+      })();
+      return true;
+    case 'wakeUpSingleTab':
+      ungroupIfNapped(request.tabId);
+      return false;
+    case 'wakeUpAll':
+      wakeUpAllTabs();
+      return false;
+    case 'wakeUpByWhitelist':
+      wakeUpByWhitelist();
+      return false;
+    case 'getPopupTabs':
+      (async () => {
+        const senderWindowId = sender.tab?.windowId;
+        debugLog('getPopupTabs requested.', {
+          senderWindowId,
+          senderTabId: sender.tab?.id,
+          senderUrl: sender.tab?.url,
+          hasSenderTab: Boolean(sender.tab)
+        });
 
-  (async () => {
-    const senderWindowId = sender.tab?.windowId;
-    debugLog('getPopupTabs requested.', {
-      senderWindowId,
-      senderTabId: sender.tab?.id,
-      senderUrl: sender.tab?.url,
-      hasSenderTab: Boolean(sender.tab)
-    });
+        if (typeof senderWindowId === 'number') {
+          const tabs = await chrome.tabs.query({ windowId: senderWindowId });
+          debugLog('Queried tabs by sender window.', {
+            windowId: senderWindowId,
+            tabCount: tabs.length
+          });
+          if (tabs.length > 0) {
+            sendResponse({ tabs, windowId: senderWindowId });
+            return;
+          }
+        }
 
-    if (typeof senderWindowId === 'number') {
-      const tabs = await chrome.tabs.query({ windowId: senderWindowId });
-      debugLog('Queried tabs by sender window.', {
-        windowId: senderWindowId,
-        tabCount: tabs.length
+        const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+        if (lastFocusedWindow?.id) {
+          const tabs = await chrome.tabs.query({ windowId: lastFocusedWindow.id });
+          debugLog('Queried tabs by last focused window.', {
+            windowId: lastFocusedWindow.id,
+            tabCount: tabs.length
+          });
+          if (tabs.length > 0) {
+            sendResponse({ tabs, windowId: lastFocusedWindow.id });
+            return;
+          }
+        }
+
+        const tabs = await chrome.tabs.query({});
+        debugWarn('Falling back to all tabs query.', {
+          tabCount: tabs.length,
+          senderWindowId,
+          lastFocusedWindowId: lastFocusedWindow?.id
+        });
+        sendResponse({ tabs, windowId: senderWindowId || lastFocusedWindow?.id || null });
+      })().catch(error => {
+        console.error('[TabNap:background] Failed to resolve popup tabs:', error);
+        sendResponse({ tabs: [], windowId: sender.tab?.windowId || null, error: error.message });
       });
-      if (tabs.length > 0) {
-        sendResponse({ tabs, windowId: senderWindowId });
-        return;
-      }
-    }
-
-    const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
-    if (lastFocusedWindow?.id) {
-      const tabs = await chrome.tabs.query({ windowId: lastFocusedWindow.id });
-      debugLog('Queried tabs by last focused window.', {
-        windowId: lastFocusedWindow.id,
-        tabCount: tabs.length
-      });
-      if (tabs.length > 0) {
-        sendResponse({ tabs, windowId: lastFocusedWindow.id });
-        return;
-      }
-    }
-
-    const tabs = await chrome.tabs.query({});
-    debugWarn('Falling back to all tabs query.', {
-      tabCount: tabs.length,
-      senderWindowId,
-      lastFocusedWindowId: lastFocusedWindow?.id
-    });
-    sendResponse({ tabs, windowId: senderWindowId || lastFocusedWindow?.id || null });
-  })().catch(error => {
-    console.error('[TabNap:background] Failed to resolve popup tabs:', error);
-    sendResponse({ tabs: [], windowId: sender.tab?.windowId || null, error: error.message });
-  });
-
-  return true;
+      return true;
+    default:
+      return false;
+  }
 });
 
 /**
@@ -632,10 +665,7 @@ async function checkAndNapTabs(force = false) {
     // 如果插件设置为仅管理当前窗口，则跳过非当前窗口的标签页
     // 并且确保清除这些标签页可能存在的预警状态
     if (tab.windowId !== currentWindowId) {
-      if (tabNapTimeouts.has(tab.id)) {
-        clearTimeout(tabNapTimeouts.get(tab.id));
-        tabNapTimeouts.delete(tab.id);
-      }
+      clearNapTimeout(tab.id);
       await restoreTabTitle(tab.id);
       continue;
     }
@@ -716,10 +746,7 @@ async function checkAndNapTabs(force = false) {
         // 还没到休眠时间，且不在预警范围内
         await restoreTabTitle(tab.id);
         // 如果有正在运行的倒计时，清除它
-        if (tabNapTimeouts.has(tab.id)) {
-          clearTimeout(tabNapTimeouts.get(tab.id));
-          tabNapTimeouts.delete(tab.id);
-        }
+        clearNapTimeout(tab.id);
       }
     }
   }
@@ -727,11 +754,11 @@ async function checkAndNapTabs(force = false) {
 
 async function napTab(tab) {
   try {
+    if (tab.pinned) return;
+
     // 如果该标签页有正在运行的精确倒计时，清除它
-    if (tabNapTimeouts.has(tab.id)) {
-      clearTimeout(tabNapTimeouts.get(tab.id));
-      tabNapTimeouts.delete(tab.id);
-    }
+    clearNapTimeout(tab.id);
+    await activateReplacementTab(tab);
 
     const targetIndex = await getFirstNonPinnedIndex(tab.windowId);
     
@@ -747,16 +774,20 @@ async function napTab(tab) {
     // 2. 尝试加入“休眠”分组
     // 查找当前窗口中是否已有休眠分组
     const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
-    const napGroup = groups.find(g => g.title && (g.title.startsWith(BASE_NAP_TITLE) || g.title === "Nap"));
+    const napGroup = groups.find(g => isNapGroupTitle(g.title));
     
     let groupId;
     if (napGroup) {
       groupId = napGroup.id;
-      await chrome.tabs.group({ tabIds: tab.id, groupId: groupId });
+      await chrome.tabs.group({ tabIds: [tab.id], groupId: groupId });
       await updateGroupTitle(groupId);
+      await chrome.tabGroups.update(groupId, { collapsed: true });
     } else {
       // 创建新分组
-      groupId = await chrome.tabs.group({ tabIds: tab.id });
+      groupId = await chrome.tabs.group({
+        tabIds: [tab.id],
+        createProperties: { windowId: tab.windowId }
+      });
       await chrome.tabGroups.update(groupId, { 
         title: `${BASE_NAP_TITLE} (1)`, 
         color: 'grey',
@@ -771,6 +802,7 @@ async function napTab(tab) {
 
     // 4. 丢弃标签页以释放内存
     await chrome.tabs.discard(tab.id);
+    await chrome.tabGroups.update(groupId, { collapsed: true });
     
     // 5. 记录休眠时间，并清理唤醒时间记录
     const data = await chrome.storage.local.get({ nappedTabsData: {}, awakenedTabsData: {} });
