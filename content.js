@@ -1,5 +1,3 @@
-import './content.css';
-
 function mountPanel() {
   if (document.getElementById('tab-nap-root')) return;
 

@@ -1,0 +1,146 @@
+{
+  "extensionName": {
+    "message": "TabNap"
+  },
+  "extensionDescription": {
+    "message": "自动休眠不活跃的标签页，并将它们归档到最左侧。"
+  },
+  "popupTitle": {
+    "message": "TabNap"
+  },
+  "searchPlaceholder": {
+    "message": "搜索标签页..."
+  },
+  "currentConfig": {
+    "message": "当前配置："
+  },
+  "nappedTabs": {
+    "message": "已休眠标签页："
+  },
+  "wakeUpAll": {
+    "message": "唤醒全部已休眠标签页"
+  },
+  "napNow": {
+    "message": "立即休眠不活跃标签页"
+  },
+  "openOptions": {
+    "message": "打开设置"
+  },
+  "reloadAllTabs": {
+    "message": "刷新所有标签页"
+  },
+  "optionsTitle": {
+    "message": "TabNap 设置"
+  },
+  "timeoutLabel": {
+    "message": "自动休眠"
+  },
+  "autoCloseTimeoutLabel": {
+    "message": "自动关闭"
+  },
+  "keepActiveLabel": {
+    "message": "受保护标签页"
+  },
+  "timeoutHelp": {
+    "message": "闲置 N 分钟的标签页将休眠，并归入休眠分组。"
+  },
+  "autoCloseHelp": {
+    "message": "闲置 N 分钟的标签页将被自动关闭。"
+  },
+  "keepActiveHelp": {
+    "message": "最近的 N 个标签页保持运行，不会被休眠或关闭。"
+  },
+  "excludeAudioLabel": {
+    "message": "保留正在播放音频的标签页"
+  },
+  "whitelistLabel": {
+    "message": "白名单"
+  },
+  "whitelistDescription": {
+    "message": "每行一个关键词或域名"
+  },
+  "whitelistPlaceholder": {
+    "message": "例如：youtube.com\ngmail.com\nmusic"
+  },
+  "saveButton": {
+    "message": "保存设置"
+  },
+  "statusSaved": {
+    "message": "设置已保存。"
+  },
+  "invalidTimeout": {
+    "message": "请输入有效的分钟数（至少 1）"
+  },
+  "minutes": {
+    "message": "分钟"
+  },
+  "never": {
+    "message": "从不"
+  },
+  "napGroupTitle": {
+    "message": "☕"
+  },
+  "warningText": {
+    "message": "即将休眠..."
+  },
+  "nappedFor": {
+    "message": "已休眠"
+  },
+  "nappingIn": {
+    "message": "休眠倒计时"
+  },
+  "addToWhitelist": {
+    "message": "加入白名单"
+  },
+  "removeFromWhitelist": {
+    "message": "移出白名单"
+  },
+  "napSingleTab": {
+    "message": "休眠"
+  },
+  "wakeUpSingleTab": {
+    "message": "唤醒"
+  },
+  "seconds": {
+    "message": "秒"
+  },
+  "closeTab": {
+    "message": "关闭标签页"
+  },
+  "autoCloseIn": {
+    "message": " 后关闭"
+  },
+  "afterSleep": {
+    "message": " 后休眠"
+  },
+  "tabListTitle": {
+    "message": "标签页状态"
+  },
+  "tabActive": {
+    "message": "运行中"
+  },
+  "tabNapped": {
+    "message": "已休眠"
+  },
+  "back": {
+    "message": "返回"
+  },
+  "closePanel": {
+    "message": "关闭面板"
+  },
+  "pinnedStatus": {
+    "message": "已固定"
+  },
+  "currentTabHover": {
+    "message": "当前标签页"
+  },
+  "whitelistedTabHover": {
+    "message": "白名单标签页"
+  },
+  "languageLabel": {
+    "message": "语言"
+  },
+  "languageAuto": {
+    "message": "跟随浏览器"
+  }
+}

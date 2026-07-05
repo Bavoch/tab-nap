@@ -1,10 +1,13 @@
-const DEFAULT_TIMEOUT = 10;
+const DEFAULT_TIMEOUT = 30;
 const DEFAULT_AUTO_CLOSE_TIMEOUT = 300;
 const DEFAULT_EXCLUDE_AUDIO = true;
 const DEFAULT_WHITELIST = '';
-const DEFAULT_KEEP_ACTIVE = 5;
+const DEFAULT_KEEP_ACTIVE = 10;
+const DEFAULT_LANGUAGE = 'auto';
+// 由 i18n.js（经典脚本，先于本模块加载）挂载到 globalThis 的统一消息层
+const i18n = globalThis.TabNapI18n;
 let updateInterval;
-let currentTabType = 'napped'; // 'active' or 'napped'
+let currentTabType = 'active'; // 'active' or 'napped'
 let popupDisposed = false;
 
 function stopPopupUpdates() {
@@ -94,7 +97,7 @@ function translatePage() {
   // Translate text content
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
-    const message = chrome.i18n.getMessage(key);
+    const message = i18n.getMessage(key);
     if (message) {
       el.textContent = message;
     }
@@ -103,13 +106,13 @@ function translatePage() {
   // Translate titles/tooltips
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
     const key = el.getAttribute('data-i18n-title');
-    const message = chrome.i18n.getMessage(key);
+    const message = i18n.getMessage(key);
     if (message) {
       el.dataset.tooltip = message;
       el.setAttribute('aria-label', message);
       el.removeAttribute('title');
     }
-    
+
     el.onmouseenter = (e) => {
       const msg = el.dataset.tooltip || el.getAttribute('aria-label') || el.getAttribute('data-i18n-title') || '';
       if (msg) showTooltip(e, msg);
@@ -121,7 +124,7 @@ function translatePage() {
   // Translate placeholders
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     const key = el.getAttribute('data-i18n-placeholder');
-    const message = chrome.i18n.getMessage(key);
+    const message = i18n.getMessage(key);
     if (message) {
       el.placeholder = message;
     }
@@ -166,7 +169,8 @@ function saveOptions(silent = false) {
   const enableAutoClose = document.getElementById('enableAutoClose').checked;
   const enableKeepActive = document.getElementById('enableKeepActive').checked;
   const whitelist = document.getElementById('whitelist').value;
-  
+  const language = document.getElementById('language').value;
+
   // 在实时保存模式下，如果是无效数值，我们可以选择不保存或者恢复旧值，这里先保持逻辑
   if (enableAutoSleep && (isNaN(timeout) || timeout < 1)) return;
   if (enableAutoClose && (isNaN(autoCloseTimeout) || autoCloseTimeout < 1)) return;
@@ -180,11 +184,14 @@ function saveOptions(silent = false) {
     whitelist: whitelist,
     enableAutoSleep,
     enableAutoClose,
-    enableKeepActive
+    enableKeepActive,
+    language
   }, () => {
+    // 同步内存中的语言设置，使后续 i18n.getMessage() 立即生效
+    i18n.setLanguage(language);
     if (!silent) {
       const status = document.getElementById('status');
-      status.textContent = chrome.i18n.getMessage('statusSaved');
+      status.textContent = i18n.getMessage('statusSaved');
       setTimeout(() => {
         status.textContent = '';
       }, 2000);
@@ -202,13 +209,14 @@ function restoreOptions() {
     activeTabsToKeep: DEFAULT_KEEP_ACTIVE,
     excludeAudio: DEFAULT_EXCLUDE_AUDIO,
     whitelist: DEFAULT_WHITELIST,
+    language: DEFAULT_LANGUAGE,
     enableAutoSleep: null,
     enableAutoClose: null,
     enableKeepActive: null
   }, (items) => {
     const fields = [
-      'timeout', 'autoCloseTimeout', 'activeTabsToKeep', 
-      'excludeAudio', 'whitelist', 
+      'timeout', 'autoCloseTimeout', 'activeTabsToKeep',
+      'excludeAudio', 'whitelist',
       'enableAutoSleep', 'enableAutoClose', 'enableKeepActive'
     ];
 
@@ -219,20 +227,21 @@ function restoreOptions() {
     document.getElementById('activeTabsToKeep').value = items.activeTabsToKeep;
     document.getElementById('excludeAudio').checked = items.excludeAudio;
     document.getElementById('whitelist').value = items.whitelist;
-    
+    document.getElementById('language').value = items.language;
+
     const enableAutoSleep = items.enableAutoSleep !== null ? items.enableAutoSleep : true;
-    const enableAutoClose = items.enableAutoClose !== null ? items.enableAutoClose : (items.autoCloseTimeout > 0);
+    const enableAutoClose = items.enableAutoClose !== null ? items.enableAutoClose : false;
     const enableKeepActive = items.enableKeepActive !== null ? items.enableKeepActive : (items.activeTabsToKeep > 0);
-    
+
     document.getElementById('enableAutoSleep').checked = enableAutoSleep;
     document.getElementById('enableAutoClose').checked = enableAutoClose;
     document.getElementById('enableKeepActive').checked = enableKeepActive;
-    
+
     // 根据开关状态显示/隐藏内容
     document.getElementById('timeout-content').classList.toggle('hidden', !enableAutoSleep);
     document.getElementById('autoClose-content').classList.toggle('hidden', !enableAutoClose);
     document.getElementById('keepActive-content').classList.toggle('hidden', !enableKeepActive);
-    
+
     // 绑定实时保存逻辑
     const debouncedSave = debounce(() => saveOptions(true), 500);
 
@@ -250,6 +259,16 @@ function restoreOptions() {
         debouncedSave();
       });
     });
+
+    // 语言切换：立即重新翻译 UI + 更新主面板，并持久化（background 监听 storage 变化刷新分组标题）
+    const languageSelect = document.getElementById('language');
+    languageSelect.addEventListener('change', () => {
+      const lang = languageSelect.value;
+      i18n.setLanguage(lang);
+      translatePage();
+      updatePopup();
+      chrome.storage.local.set({ language: lang });
+    });
   });
 }
 
@@ -259,9 +278,9 @@ function formatTime(ms, isCountdown = false) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   
-  const minStr = chrome.i18n.getMessage('minutes') || 'm';
-  const secStr = chrome.i18n.getMessage('seconds') || 's';
-  const afterSleepStr = isCountdown ? (chrome.i18n.getMessage('afterSleep') || ' to nap') : '';
+  const minStr = i18n.getMessage('minutes') || 'm';
+  const secStr = i18n.getMessage('seconds') || 's';
+  const afterSleepStr = isCountdown ? (i18n.getMessage('afterSleep') || ' to nap') : '';
   
   if (minutes >= 1) {
     return `${minutes}${minStr}${afterSleepStr}`;
@@ -450,9 +469,9 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
   // 悬停时修改标题文字的逻辑
   if (isCurrentViewing || isWhitelisted) {
     const originalTitle = tab.title;
-    const hoverText = isCurrentViewing 
-      ? (chrome.i18n.getMessage('currentTabHover') || 'Current Tab')
-      : (chrome.i18n.getMessage('whitelistedTabHover') || 'Whitelisted Tab');
+    const hoverText = isCurrentViewing
+      ? (i18n.getMessage('currentTabHover') || 'Current Tab')
+      : (i18n.getMessage('whitelistedTabHover') || 'Whitelisted Tab');
     
     tabItem.addEventListener('mouseenter', () => {
       title.textContent = hoverText;
@@ -484,7 +503,7 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
     const napBtn = document.createElement('button');
     napBtn.className = 'action-btn nap-btn';
     napBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
-    const napTitle = chrome.i18n.getMessage('napSingleTab') || 'Nap';
+    const napTitle = i18n.getMessage('napSingleTab') || 'Nap';
     napBtn.onmouseenter = (e) => showTooltip(e, napTitle);
     napBtn.onmouseleave = hideTooltip;
     napBtn.onclick = async (e) => {
@@ -504,9 +523,9 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
     ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>'
     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path></svg>';
   
-  const wlTitle = isWhitelisted 
-    ? chrome.i18n.getMessage('removeFromWhitelist') 
-    : chrome.i18n.getMessage('addToWhitelist');
+  const wlTitle = isWhitelisted
+    ? i18n.getMessage('removeFromWhitelist')
+    : i18n.getMessage('addToWhitelist');
   
   wlBtn.onmouseenter = (e) => showTooltip(e, wlTitle);
   wlBtn.onmouseleave = hideTooltip;
@@ -524,7 +543,7 @@ function createTabItem(tab, settings, currentWindow, now, whitelist, timeoutMs, 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'action-btn close-btn';
   closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-  const closeTitle = chrome.i18n.getMessage('closeTab') || 'Close Tab';
+  const closeTitle = i18n.getMessage('closeTab') || 'Close Tab';
   closeBtn.onmouseenter = (e) => showTooltip(e, closeTitle);
   closeBtn.onmouseleave = hideTooltip;
   closeBtn.onclick = async (e) => {
@@ -562,7 +581,7 @@ function updateTimeSpan(timeSpan, settings, now, timeoutMs, enableAutoSleep) {
   if (tabItem) tabItem.classList.remove('has-timer');
 
   const autoCloseTimeoutMs = (settings.autoCloseTimeout || 0) * 60 * 1000;
-  const enableAutoClose = settings.enableAutoClose ?? (settings.autoCloseTimeout > 0);
+  const enableAutoClose = settings.enableAutoClose ?? false;
 
   if (isNapped) {
     timeSpan.classList.add('napped');
@@ -580,9 +599,9 @@ function updateTimeSpan(timeSpan, settings, now, timeoutMs, enableAutoSleep) {
       const remainingClose = autoCloseTimeoutMs - (now - lastActive);
       
       if (remainingClose > 0) {
-        const closeStr = chrome.i18n.getMessage('autoCloseIn') || ' to close';
+        const closeStr = i18n.getMessage('autoCloseIn') || ' to close';
         const closeTime = formatTime(remainingClose);
-        const nappedForStr = chrome.i18n.getMessage('nappedFor') || 'Napped';
+        const nappedForStr = i18n.getMessage('nappedFor') || 'Napped';
         if (timeText) {
           timeSpan.textContent = `${nappedForStr} ${timeText} (${closeTime}${closeStr})`;
         } else {
@@ -672,7 +691,6 @@ function requestTabsFromHost() {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const timeoutId = setTimeout(() => {
       window.removeEventListener('message', handleMessage);
-      debugWarn('Timed out waiting for host page tabs response.', { requestId });
       resolve(null);
     }, 1000);
 
@@ -743,47 +761,29 @@ async function updatePopup() {
     const { tabs: allTabs, currentWindow } = await getPopupWindowTabs();
     
     const tabListContainer = document.getElementById('tab-list');
-    const activeTabContainer = document.getElementById('active-tab-container');
-    const activeTabSection = document.getElementById('active-tab-section');
     const searchInput = document.getElementById('tab-search');
     const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
-    
+
     const now = Date.now();
 
     // 预先分类和过滤
     const nappedTabs = allTabs.filter(t => t.discarded && !t.pinned);
     const activeTabs = allTabs.filter(t => !t.discarded && !t.pinned);
-    
+
     // 更新标签栏标题和数量
-    const nappedLabel = chrome.i18n.getMessage('tabNapped') || 'Hibernated';
-    const activeLabel = chrome.i18n.getMessage('tabActive') || 'Running';
+    const nappedLabel = i18n.getMessage('tabNapped') || 'Hibernated';
+    const activeLabel = i18n.getMessage('tabActive') || 'Running';
     document.getElementById('tab-napped').textContent = `${nappedLabel} (${nappedTabs.length})`;
     document.getElementById('tab-active').textContent = `${activeLabel} (${activeTabs.length})`;
-
-    // 找到当前激活的标签页
-    const currentTab = allTabs.find(t => t.active && t.windowId === currentWindow.id);
-    
-    // 渲染当前激活标签页
-    if (currentTab) {
-      activeTabSection.classList.remove('hidden');
-      const fragment = document.createDocumentFragment();
-      fragment.appendChild(createTabItem(currentTab, settings, currentWindow, now, whitelist, timeoutMs, enableAutoSleep));
-      activeTabContainer.innerHTML = '';
-      activeTabContainer.appendChild(fragment);
-    } else {
-      activeTabSection.classList.add('hidden');
-    }
 
     // 决定显示哪些标签页
     let displayTabs = currentTabType === 'active' ? activeTabs : nappedTabs;
 
     // 搜索过滤
     if (searchTerm) {
-      // 隐藏 tab switcher 和 active tab section 当搜索时
+      // 隐藏 tab switcher 当搜索时
       const switcher = document.querySelector('.tab-switcher');
       if (switcher) switcher.classList.add('hidden');
-      
-      activeTabSection.classList.add('hidden');
 
       displayTabs = allTabs.filter(t => {
         const title = (t.title || '').toLowerCase();
@@ -794,10 +794,6 @@ async function updatePopup() {
       // 无搜索词，恢复默认显示
       const switcher = document.querySelector('.tab-switcher');
       if (switcher) switcher.classList.remove('hidden');
-      
-      if (currentTab) {
-        activeTabSection.classList.remove('hidden');
-      }
     }
     
     // 排序：按最后访问时间降序（最近访问的在前）
@@ -862,6 +858,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.parent !== window) {
     document.body.classList.add('is-iframe');
   }
+  // 先加载持久化的语言设置，再翻译，确保首次渲染即使用正确语言
+  await i18n.loadLanguage();
   await safeUpdate(async () => {
     translatePage();
     updatePopup();
@@ -890,7 +888,7 @@ function cleanupPopup() {
   stopPopupUpdates();
 }
 
-// 当窗口关闭时清除定时器。iframe 中 unload 可能被 Permissions Policy 禁止。
+// 当弹窗关闭时清除定时器。使用 pagehide（unload 的现代替代），
+// 在 MV3 弹窗、iframe、bfcache 等场景下都能可靠触发，且不会触发
+// "unload is not allowed" 的 Permissions Policy 警告。
 window.addEventListener('pagehide', cleanupPopup);
-window.addEventListener('unload', cleanupPopup);
-window.addEventListener('beforeunload', cleanupPopup);
